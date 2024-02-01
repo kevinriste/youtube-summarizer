@@ -55,8 +55,6 @@ const handler = async (
           max_tokens: openAiMaxResponseTokens,
         });
 
-        console.log(JSON.stringify(completion));
-
         summary = completion.choices[0].message.content;
       }
 

@@ -30,7 +30,7 @@ const Home = () => {
     if (response.ok) {
       const responseJson = await response.json();
       setTranscriptText(responseJson)
-      if (alsoGetSummary) handlePasswordDialogClick();
+      if (alsoGetSummary) ensurePasswordExistsForGetSummary(undefined, responseJson);
     }
     else {
       const responseError = await response.text();
@@ -40,13 +40,15 @@ const Home = () => {
     }
   };
 
-  const getTranscriptSummary = async () => {
+  // Allow option to directly pass in transcript text in case state updates are slow
+  // to ensure it's present before we request the summary
+  const getTranscriptSummary = async (directlyPassedTranscriptText?: string) => {
     setSummaryText('Fetching summary...')
     setSummaryAlert({ message: '', level: 'info' })
     setIsSummaryError(false)
     const passwordToSubmitToApi = localStorage.getItem("apiPassword")
     const dataToSubmit = {
-      transcript: transcriptText,
+      transcript: directlyPassedTranscriptText ?? transcriptText,
       userPrompt: promptText,
       passwordToSubmitToApi
     };
@@ -74,7 +76,7 @@ const Home = () => {
   const [summaryText, setSummaryText] = React.useState('');
 
   const [urlText, setUrlText] = React.useState('');
-  const [promptText, setPromptText] = React.useState('Please summarize the above YouTube transcript to tell me the main point the video is trying to make. Use fewer than 100 words.');
+  const [promptText, setPromptText] = React.useState('Please provide a bulleted list of the main points from the above YouTube transcript.');
 
   const [summaryAlert, setSummaryAlert] = React.useState<{ message: string, level: AlertColor }>({ message: '', level: 'info' })
 
@@ -88,17 +90,17 @@ const Home = () => {
     setPromptText(event.target.value);
   };
 
-  const handlePasswordDialogClick = (event?: React.MouseEvent<HTMLButtonElement>) => {
+  const ensurePasswordExistsForGetSummary = (event?: React.MouseEvent<HTMLButtonElement>, directlyPassedTranscriptText?: string) => {
     if (event) event.preventDefault();
     const apiPassword = localStorage.getItem("apiPassword");
     if (!apiPassword) setPasswordDialogIsOpen(true);
-    else handlePasswordDialogConfirm();
+    else conditionallyHandlePasswordSaveAndProceedToGetSummary(undefined, directlyPassedTranscriptText);
   };
 
   const handlePasswordDialogClose = () => {
     setPasswordDialogIsOpen(false);
   };
-  const handlePasswordDialogConfirm = (event?: React.FormEvent<HTMLFormElement>) => {
+  const conditionallyHandlePasswordSaveAndProceedToGetSummary = (event?: React.FormEvent<HTMLFormElement>, directlyPassedTranscriptText?: string) => {
     if (event) {
       event.preventDefault()
       setPasswordDialogIsOpen(false);
@@ -107,7 +109,7 @@ const Home = () => {
       if (typeof apiPasswordToSubmit === 'string') localStorage.setItem("apiPassword", apiPasswordToSubmit);
       else localStorage.setItem("apiPassword", JSON.stringify(apiPasswordToSubmit));
     }
-    getTranscriptSummary();
+    getTranscriptSummary(directlyPassedTranscriptText);
   };
 
   return (
@@ -126,7 +128,7 @@ const Home = () => {
         <Typography component="h1" variant="h5">
           Enter the YouTube URL
         </Typography>
-        <Box sx={{ mt: 1,  width: '100%' }}>
+        <Box sx={{ mt: 1, width: '100%' }}>
           <Stack spacing={2} alignItems="center">
             <TextField
               margin="normal"
@@ -157,6 +159,15 @@ const Home = () => {
             >
               Get Transcript and Summary
             </Button>
+            {transcriptText !== '' && !isTranscriptError && transcriptText !== 'Fetching transcript...' &&
+              <Button
+                variant="contained"
+                sx={{ mb: 2, maxWidth: "20rem" }}
+                onClick={ensurePasswordExistsForGetSummary}
+              >
+                Get Summary
+              </Button>
+            }
           </Stack>
         </Box>
         {transcriptText !== '' && <Box
@@ -170,15 +181,8 @@ const Home = () => {
         >
           {!isTranscriptError && transcriptText !== 'Fetching transcript...' &&
             <>
-              <Button
-                onClick={handlePasswordDialogClick}
-                variant="outlined"
-                sx={{ mb: 2 }}
-              >
-                Get Summary
-              </Button>
               <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
-                <form onSubmit={handlePasswordDialogConfirm}>
+                <form onSubmit={conditionallyHandlePasswordSaveAndProceedToGetSummary}>
                   <DialogTitle>Enter password</DialogTitle>
                   <DialogContent>
                     <DialogContentText>
@@ -216,9 +220,13 @@ const Home = () => {
                   >
                     Copy summary to clipboard
                   </Button>
-                  <Typography
-                    sx={{ mb: 2 }}>
-                    {summaryText}
+                  <Typography sx={{ mb: 2 }}>
+                    {summaryText.split('\n').map((line, index) => (
+                      <span key={index}>
+                        {line}
+                        <br />
+                      </span>
+                    ))}
                   </Typography>
                 </>
               }
