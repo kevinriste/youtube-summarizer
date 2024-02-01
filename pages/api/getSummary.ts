@@ -1,12 +1,20 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
-const { OpenAI } = require("openai");
-const { encode, decode } = require('gpt-3-encoder')
+import OpenAI, { toFile } from 'openai';
+import { encode, decode } from 'gpt-tokenizer';
 
 const configuration = {
   apiKey: process.env.OPENAI_API_KEY,
 };
 const openai = new OpenAI(configuration);
+
+const processResponseText = (text) => {
+  // Regular expression to match the citation pattern 【number†source】
+  const citationRegex = /【\d+†source】/g;
+
+  // Replace the citation with an empty string
+  return text.replace(citationRegex, '');
+};
 
 const handler = async (
   req: NextApiRequest,
@@ -18,46 +26,94 @@ const handler = async (
   const transcript = body.transcript || '';
   const userPrompt = body.userPrompt || '';
   const inputPassword = body.passwordToSubmitToApi || '';
+  const messageToPrepend = ''
 
   if (inputPassword === process.env.API_PASSWORD) {
-
-    let prompt = '### START TRANSCRIPT ### ' + transcript
-    const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt
-    const tokensInEndOfTranscript = encode(endOfTranscript).length;
-
     try {
+
+      let prompt = '### START TRANSCRIPT ### ' + transcript
+      const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt
+      const tokensInEndOfTranscript = encode(endOfTranscript).length;
       const encodedPrompt = encode(prompt);
       let tokenCount = encodedPrompt.length;
-      let messageToPrepend = ''
+      let messageIsBelowTokenLimit = true;
 
       if ((tokenCount + openAiMaxResponseTokens + tokensInEndOfTranscript) > openAiMaxTotalTokens) {
-        const trimmedTokens = encodedPrompt.slice(0, (openAiMaxTotalTokens - openAiMaxResponseTokens - tokensInEndOfTranscript));
-        prompt = decode(trimmedTokens)
-        messageToPrepend = `Request was too big to submit in its entirety; only ${openAiMaxTotalTokens - openAiMaxResponseTokens} of the original ${tokenCount} tokens could be submitted (${Number((openAiMaxTotalTokens - openAiMaxResponseTokens) / tokenCount).toLocaleString(undefined, { style: 'percent', minimumFractionDigits: 1 })}).`
+        messageIsBelowTokenLimit = false;
+        console.log("Using assistant method due to long transcript.")
       }
 
       prompt = prompt + endOfTranscript
 
       let summary: any = '';
 
-      if (process.env.OPENAI_MODEL !== "gpt-3.5-turbo") {
-        const completion = await openai.completions.create({
-          model: process.env.OPENAI_MODEL,
-          prompt: prompt,
-          max_tokens: openAiMaxResponseTokens,
-        });
-
-        summary = completion.choices[0].text;
-      } else {
+      if (messageIsBelowTokenLimit) {
         const completion = await openai.chat.completions.create({
-          model: process.env.OPENAI_MODEL,
+          model: process.env.OPENAI_MODEL || '',
           messages: [{ role: "user", content: prompt }],
           max_tokens: openAiMaxResponseTokens,
         });
 
         summary = completion.choices[0].message.content;
-      }
+      } else {
+        const buffer = Buffer.from(transcript);
 
+        console.log("Uploading transcript as file for assistant.")
+        const file = await openai.files.create({
+          file: await toFile(buffer, 'transcript.txt'),
+          purpose: "assistants",
+        });
+
+        console.log("Creating assistant.")
+        const assistant = await openai.beta.assistants.create({
+          model: process.env.OPENAI_MODEL || '',
+          file_ids: [file.id],
+          tools: [{ "type": "retrieval" }],
+        });
+
+        console.log("Creating thread.")
+        const thread = await openai.beta.threads.create({
+          messages: [
+            {
+              "role": "user",
+              "content": userPrompt,
+              "file_ids": [file.id]
+            }
+          ]
+        });
+
+        console.log("Creating assistant-thread run.")
+        const run = await openai.beta.threads.runs.create(
+          thread.id,
+          { assistant_id: assistant.id }
+        );
+
+        let keepRetrievingRun;
+
+        do {
+          keepRetrievingRun = await openai.beta.threads.runs.retrieve(
+            thread.id,
+            run.id,
+          );
+          console.log(`Run status: ${keepRetrievingRun.status}`)
+
+          if (keepRetrievingRun.status === "completed") {
+            const allMessages = await openai.beta.threads.messages.list(thread.id);
+
+            if (allMessages.data[0].content[0].type === 'text') {
+              summary = processResponseText(allMessages.data[0].content[0].text.value);
+            }
+          } else await new Promise(resolve => setTimeout(resolve, 500));
+        } while (keepRetrievingRun.status === "queued" || keepRetrievingRun.status === "in_progress")
+
+        console.log("Deleting uploaded file.")
+        await openai.beta.assistants.files.del(
+          assistant.id,
+          file.id,
+        );
+        
+        console.log("Request completed.")
+      }
 
       res.status(200).json({
         message: messageToPrepend,
