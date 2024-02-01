@@ -11,17 +11,17 @@ import DialogActions from '@mui/material/DialogActions';
 import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
+import { Stack } from '@mui/material';
 
 const Home = () => {
-  const getYoutubeTranscript = async (event: React.FormEvent<HTMLFormElement>) => {
+  const getYoutubeTranscript = async (event: React.MouseEvent<HTMLButtonElement>, alsoGetSummary: boolean = false) => {
     event.preventDefault();
     setTranscriptText('Fetching transcript...')
     setSummaryText('')
     setisTranscriptError(false)
     setIsSummaryError(false)
-    const data = new FormData(event.currentTarget);
     const dataToSubmit = {
-      yturl: data.get('yturl'),
+      yturl: urlText,
     };
     const response = await fetch("/api/getTranscript", {
       method: "POST",
@@ -30,6 +30,7 @@ const Home = () => {
     if (response.ok) {
       const responseJson = await response.json();
       setTranscriptText(responseJson)
+      if (alsoGetSummary) handlePasswordDialogClick();
     }
     else {
       const responseError = await response.text();
@@ -39,12 +40,14 @@ const Home = () => {
     }
   };
 
-  const getTranscriptSummary = async (passwordToSubmitToApi: string) => {
+  const getTranscriptSummary = async () => {
     setSummaryText('Fetching summary...')
     setSummaryAlert({ message: '', level: 'info' })
     setIsSummaryError(false)
+    const passwordToSubmitToApi = localStorage.getItem("apiPassword")
     const dataToSubmit = {
       transcript: transcriptText,
+      userPrompt: promptText,
       passwordToSubmitToApi
     };
     const response = await fetch("/api/getSummary", {
@@ -70,25 +73,41 @@ const Home = () => {
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState('');
 
+  const [urlText, setUrlText] = React.useState('');
+  const [promptText, setPromptText] = React.useState('Please summarize the above YouTube transcript to tell me the main point the video is trying to make. Use fewer than 100 words.');
+
   const [summaryAlert, setSummaryAlert] = React.useState<{ message: string, level: AlertColor }>({ message: '', level: 'info' })
 
   const [passwordDialogIsOpen, setPasswordDialogIsOpen] = React.useState(false);
 
-  const handlePasswordDialogClick = (event: React.MouseEvent<HTMLButtonElement>) => {
-    event.preventDefault()
-    setPasswordDialogIsOpen(true);
+  const handleUrlChange = (event) => {
+    setUrlText(event.target.value);
+  };
+
+  const handlePromptChange = (event) => {
+    setPromptText(event.target.value);
+  };
+
+  const handlePasswordDialogClick = (event?: React.MouseEvent<HTMLButtonElement>) => {
+    if (event) event.preventDefault();
+    const apiPassword = localStorage.getItem("apiPassword");
+    if (!apiPassword) setPasswordDialogIsOpen(true);
+    else handlePasswordDialogConfirm();
   };
 
   const handlePasswordDialogClose = () => {
     setPasswordDialogIsOpen(false);
   };
-  const handlePasswordDialogConfirm = (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    setPasswordDialogIsOpen(false);
-    const data = new FormData(event.currentTarget);
-    const apiPasswordToSubmit = data.get('apiPasswordToSubmit');
-    if (typeof apiPasswordToSubmit === 'string') getTranscriptSummary(apiPasswordToSubmit);
-    else getTranscriptSummary(JSON.stringify(apiPasswordToSubmit))
+  const handlePasswordDialogConfirm = (event?: React.FormEvent<HTMLFormElement>) => {
+    if (event) {
+      event.preventDefault()
+      setPasswordDialogIsOpen(false);
+      const data = new FormData(event.currentTarget);
+      const apiPasswordToSubmit = data.get('apiPasswordToSubmit');
+      if (typeof apiPasswordToSubmit === 'string') localStorage.setItem("apiPassword", apiPasswordToSubmit);
+      else localStorage.setItem("apiPassword", JSON.stringify(apiPasswordToSubmit));
+    }
+    getTranscriptSummary();
   };
 
   return (
@@ -107,23 +126,38 @@ const Home = () => {
         <Typography component="h1" variant="h5">
           Enter the YouTube URL
         </Typography>
-        <Box component="form" onSubmit={getYoutubeTranscript} noValidate sx={{ mt: 1 }}>
-          <TextField
-            margin="normal"
-            fullWidth
-            id="yturl"
-            label="YouTube URL"
-            name="yturl"
-            autoFocus
-          />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3 }}
-          >
-            Get transcript
-          </Button>
+        <Box sx={{ mt: 1,  width: '100%' }}>
+          <Stack spacing={2} alignItems="center">
+            <TextField
+              margin="normal"
+              fullWidth
+              label="YouTube URL"
+              autoFocus
+              value={urlText}
+              onChange={handleUrlChange}
+            />
+            <TextField
+              margin="normal"
+              fullWidth
+              label="Summary prompt"
+              value={promptText}
+              onChange={handlePromptChange}
+            />
+            <Button
+              variant="contained"
+              sx={{ mt: 3, maxWidth: "20rem" }}
+              onClick={getYoutubeTranscript}
+            >
+              Get transcript
+            </Button>
+            <Button
+              variant="contained"
+              sx={{ mt: 3, maxWidth: "20rem" }}
+              onClick={(e) => getYoutubeTranscript(e, true)}
+            >
+              Get Transcript and Summary
+            </Button>
+          </Stack>
         </Box>
         {transcriptText !== '' && <Box
           sx={{
@@ -175,6 +209,13 @@ const Home = () => {
                       {summaryAlert.message}
                     </Alert>
                   }
+                  <Button
+                    onClick={() => navigator.clipboard.writeText(summaryText)}
+                    variant="outlined"
+                    sx={{ mb: 2 }}
+                  >
+                    Copy summary to clipboard
+                  </Button>
                   <Typography
                     sx={{ mb: 2 }}>
                     {summaryText}
@@ -194,7 +235,7 @@ const Home = () => {
                 variant="outlined"
                 sx={{ mb: 2 }}
               >
-                Copy to clipboard
+                Copy transcript to clipboard
               </Button>
             </>
           }
