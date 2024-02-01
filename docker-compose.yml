@@ -1,0 +1,16 @@
+version: '3.3'
+services:
+    yt-transcribe-klt-pw:
+        restart: always
+        environment:
+          VIRTUAL_HOST: "ytt.klt.pw"
+          VIRTUAL_PORT: 3000
+          LETSENCRYPT_HOST: "ytt.klt.pw"
+        env_file:
+          - .env.local
+        build: .
+
+networks:
+  default:
+    external:
+      name: nginx-proxy-certbot-docker_default
