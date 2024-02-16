@@ -125,11 +125,21 @@ const handler = async (
           summary = processResponseText(allMessages.data[0].content[0].text.value);
         }
 
-        console.log("Deleting uploaded file.")
-        await openai.beta.assistants.files.del(
-          assistantId,
-          fileId,
-        );
+        try {
+          console.log("Deleting uploaded file.")
+          await openai.beta.assistants.files.del(
+            assistantId,
+            fileId,
+          );
+        } catch (error: any) {
+          console.error("Error deleting file, not elevated since it doesn't affect the user experience.")
+          if (error.response) {
+            console.error(error.response.status);
+            console.error(error.response.data);
+          } else {
+            console.error(error.message);
+          }
+        }
 
         console.log("Request completed.")
 
