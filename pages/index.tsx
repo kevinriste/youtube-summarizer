@@ -43,23 +43,35 @@ const Home = () => {
   // Allow option to directly pass in transcript text in case state updates are slow
   // to ensure it's present before we request the summary
   const getTranscriptSummary = async (directlyPassedTranscriptText?: string) => {
-    setSummaryText('Fetching summary...')
-    setSummaryAlert({ message: '', level: 'info' })
-    setIsSummaryError(false)
-    const passwordToSubmitToApi = localStorage.getItem("apiPassword")
-    const dataToSubmit = {
-      transcript: directlyPassedTranscriptText ?? transcriptText,
-      userPrompt: promptText,
-      passwordToSubmitToApi
-    };
+    let dataToSubmit = {};
+    if (!pendingRequestData) {
+      setSummaryText('Fetching summary...')
+      setSummaryAlert({ message: '', level: 'info' })
+      setIsSummaryError(false)
+      const passwordToSubmitToApi = localStorage.getItem("apiPassword")
+      dataToSubmit = {
+        transcript: directlyPassedTranscriptText ?? transcriptText,
+        userPrompt: promptText,
+        passwordToSubmitToApi
+      };
+    } else {
+      dataToSubmit = pendingRequestData;
+    }
     const response = await fetch("/api/getSummary", {
       method: "POST",
       body: JSON.stringify(dataToSubmit),
     });
     if (response.ok) {
       const responseJson = await response.json();
-      setSummaryText(responseJson.summary)
-      if (responseJson.message !== '') setSummaryAlert({ message: responseJson.message, level: "info" })
+      const keysExpectedIfResponseIsPending = ['threadId', 'runId', 'assistantId', 'fileId', 'status'];
+      if (keysExpectedIfResponseIsPending.every(key => responseJson.hasOwnProperty(key))) {
+        setPendingRequestData(responseJson);
+        setSummaryAlert({ message: `Processing using OpenAI Assistant due to long text; request is pending and updates will appear here. Current status: ${responseJson.status}`, level: "info" })
+      } else {
+        setPendingRequestData(undefined);
+        setSummaryText(responseJson.summary)
+      }
+      if ((responseJson?.message || '') !== '') setSummaryAlert({ message: responseJson.message, level: "info" })
     }
     else {
       const responseError = await response.text();
@@ -69,11 +81,22 @@ const Home = () => {
     }
   };
 
+  React.useEffect(() => {
+    let interval;
+    if (pendingRequestData) {
+      interval = setInterval(() => getTranscriptSummary(), 2000); // Poll every 5 seconds
+    } else {
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  });
+
   const [isTranscriptError, setisTranscriptError] = React.useState(false);
   const [transcriptText, setTranscriptText] = React.useState('');
 
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState('');
+  const [pendingRequestData, setPendingRequestData] = React.useState();
 
   const [urlText, setUrlText] = React.useState('');
   const [promptText, setPromptText] = React.useState('Please provide a bulleted list of the main points from the above YouTube transcript.');

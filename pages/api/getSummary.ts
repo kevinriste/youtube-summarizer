@@ -1,7 +1,7 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import OpenAI, { toFile } from 'openai';
-import { encode, decode } from 'gpt-tokenizer';
+import { encode } from 'gpt-tokenizer';
 
 const configuration = {
   apiKey: process.env.OPENAI_API_KEY,
@@ -20,17 +20,22 @@ const handler = async (
   req: NextApiRequest,
   res: NextApiResponse
 ) => {
-  const openAiMaxResponseTokens = parseInt(process.env.OPENAI_MAX_RESPONSE_TOKENS || '', 10);
-  const openAiMaxTotalTokens = parseInt(process.env.OPENAI_MAX_TOTAL_TOKENS || '', 10);
-  const body = JSON.parse(req.body);
-  const transcript = body.transcript || '';
-  const userPrompt = body.userPrompt || '';
-  const inputPassword = body.passwordToSubmitToApi || '';
-  const messageToPrepend = ''
+  try {
+    const openAiMaxResponseTokens = parseInt(process.env.OPENAI_MAX_RESPONSE_TOKENS || '', 10);
+    const openAiMaxTotalTokens = parseInt(process.env.OPENAI_MAX_TOTAL_TOKENS || '', 10);
+    const body = JSON.parse(req.body);
+    const transcript = body.transcript || '';
+    const userPrompt = body.userPrompt || '';
+    const inputPassword = body.passwordToSubmitToApi || '';
 
-  if (inputPassword === process.env.API_PASSWORD) {
-    try {
+    const threadId = body.threadId || '';
+    const runId = body.runId || '';
+    const assistantId = body.assistantId || '';
+    const fileId = body.fileId || '';
 
+    let summary: any = '';
+
+    if (inputPassword === process.env.API_PASSWORD) {
       let prompt = '### START TRANSCRIPT ### ' + transcript
       const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt
       const tokensInEndOfTranscript = encode(endOfTranscript).length;
@@ -45,8 +50,6 @@ const handler = async (
 
       prompt = prompt + endOfTranscript
 
-      let summary: any = '';
-
       if (messageIsBelowTokenLimit) {
         const completion = await openai.chat.completions.create({
           model: process.env.OPENAI_MODEL || '',
@@ -55,6 +58,10 @@ const handler = async (
         });
 
         summary = completion.choices[0].message.content;
+
+        res.status(200).json({
+          summary
+        })
       } else {
         const buffer = Buffer.from(transcript);
 
@@ -88,48 +95,60 @@ const handler = async (
           { assistant_id: assistant.id }
         );
 
-        let keepRetrievingRun;
+        res.status(200).json({
+          threadId: thread.id,
+          runId: run.id,
+          assistantId: assistant.id,
+          fileId: file.id,
+          status: run.status,
+        })
+      }
+    } else if (threadId !== '' && runId !== '' && assistantId !== '' && fileId !== '') {
+      const followUpRun = await openai.beta.threads.runs.retrieve(
+        threadId,
+        runId,
+      );
+      console.log(`Run status: ${followUpRun.status}`)
 
-        do {
-          keepRetrievingRun = await openai.beta.threads.runs.retrieve(
-            thread.id,
-            run.id,
-          );
-          console.log(`Run status: ${keepRetrievingRun.status}`)
+      if (followUpRun.status !== "completed") {
+        res.status(200).json({
+          threadId: threadId,
+          runId: runId,
+          assistantId: assistantId,
+          fileId: fileId,
+          status: followUpRun.status,
+        })
+      } else {
+        const allMessages = await openai.beta.threads.messages.list(threadId);
 
-          if (keepRetrievingRun.status === "completed") {
-            const allMessages = await openai.beta.threads.messages.list(thread.id);
-
-            if (allMessages.data[0].content[0].type === 'text') {
-              summary = processResponseText(allMessages.data[0].content[0].text.value);
-            }
-          } else await new Promise(resolve => setTimeout(resolve, 500));
-        } while (keepRetrievingRun.status === "queued" || keepRetrievingRun.status === "in_progress")
+        if (allMessages.data[0].content[0].type === 'text') {
+          summary = processResponseText(allMessages.data[0].content[0].text.value);
+        }
 
         console.log("Deleting uploaded file.")
         await openai.beta.assistants.files.del(
-          assistant.id,
-          file.id,
+          assistantId,
+          fileId,
         );
-        
-        console.log("Request completed.")
-      }
 
-      res.status(200).json({
-        message: messageToPrepend,
-        summary
-      })
-    } catch (error: any) {
-      if (error.response) {
-        console.error(error.response.status);
-        console.error(error.response.data);
-        res.status(500).send(error.response.data.error.message);
-      } else {
-        console.error(error.message);
-        res.status(500).send(error.message);
+        console.log("Request completed.")
+
+        res.status(200).json({
+          summary,
+          message: 'Processing complete',
+        })
       }
+    } else res.status(500).send('Incorrect API password provided or missing previous request information');
+  } catch (error: any) {
+    if (error.response) {
+      console.error(error.response.status);
+      console.error(error.response.data);
+      res.status(500).send(error.response.data.error.message);
+    } else {
+      console.error(error.message);
+      res.status(500).send(error.message);
     }
-  } else res.status(500).send('Incorrect API password provided');
+  }
 }
 
 export default handler;
