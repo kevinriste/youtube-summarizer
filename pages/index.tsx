@@ -40,6 +40,13 @@ const Home = () => {
     }
   };
 
+  const getSummaryFromTextboxContent = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    setSummaryText('')
+    setIsSummaryError(false)
+    ensurePasswordExistsForGetSummary(undefined, textboxContent);
+  };
+
   // Allow option to directly pass in transcript text in case state updates are slow
   // to ensure it's present before we request the summary
   const getTranscriptSummary = async (directlyPassedTranscriptText?: string) => {
@@ -91,6 +98,9 @@ const Home = () => {
     return () => clearInterval(interval);
   });
 
+  const defaultYoutubeSummaryPrompt = 'Please provide a bulleted list of the main points from the above YouTube transcript.';
+  const defaultTextSummaryPrompt = 'Please provide a bulleted list of the main points from the above text.';
+
   const [isTranscriptError, setisTranscriptError] = React.useState(false);
   const [transcriptText, setTranscriptText] = React.useState('');
 
@@ -99,7 +109,10 @@ const Home = () => {
   const [pendingRequestData, setPendingRequestData] = React.useState();
 
   const [urlText, setUrlText] = React.useState('');
-  const [promptText, setPromptText] = React.useState('Please provide a bulleted list of the main points from the above YouTube transcript.');
+  const [promptText, setPromptText] = React.useState(defaultYoutubeSummaryPrompt);
+
+  const [textboxContent, setTextboxContent] = React.useState('');
+  const [useTextboxContent, setUseTextboxContent] = React.useState(false);
 
   const [summaryAlert, setSummaryAlert] = React.useState<{ message: string, level: AlertColor }>({ message: '', level: 'info' })
 
@@ -111,6 +124,10 @@ const Home = () => {
 
   const handlePromptChange = (event) => {
     setPromptText(event.target.value);
+  };
+
+  const handleTextboxContentChange = (event) => {
+    setTextboxContent(event.target.value);
   };
 
   const ensurePasswordExistsForGetSummary = (event?: React.MouseEvent<HTMLButtonElement>, directlyPassedTranscriptText?: string) => {
@@ -138,29 +155,45 @@ const Home = () => {
   return (
     <Container maxWidth="lg">
       <Head>
-        <title>YouTube Transcribe</title>
+        <title>AI Summarizer</title>
       </Head>
       <Box
         sx={{
           marginTop: 8,
+          marginBottom: 2,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
         }}
       >
         <Typography component="h1" variant="h5">
-          Enter the YouTube URL
+          AI Summarizer
         </Typography>
         <Box sx={{ mt: 1, width: '100%' }}>
           <Stack spacing={2} alignItems="center">
-            <TextField
-              margin="normal"
-              fullWidth
-              label="YouTube URL"
-              autoFocus
-              value={urlText}
-              onChange={handleUrlChange}
-            />
+            {!useTextboxContent && (<>
+              <TextField
+                margin="normal"
+                fullWidth
+                label="YouTube URL"
+                autoFocus
+                value={urlText}
+                onChange={handleUrlChange}
+              />
+            </>)}
+            {useTextboxContent && (<>
+              <TextField
+                margin="normal"
+                fullWidth
+                label="Text input"
+                autoFocus
+                multiline
+                minRows={4}
+                maxRows={10}
+                value={textboxContent}
+                onChange={handleTextboxContentChange}
+              />
+            </>)}
             <TextField
               margin="normal"
               fullWidth
@@ -168,20 +201,61 @@ const Home = () => {
               value={promptText}
               onChange={handlePromptChange}
             />
-            <Button
-              variant="contained"
-              sx={{ mt: 3, maxWidth: "20rem" }}
-              onClick={getYoutubeTranscript}
-            >
-              Get transcript
-            </Button>
-            <Button
-              variant="contained"
-              sx={{ mt: 3, maxWidth: "20rem" }}
-              onClick={(e) => getYoutubeTranscript(e, true)}
-            >
-              Get Transcript and Summary
-            </Button>
+            {!useTextboxContent && (<>
+              <Button
+                variant="contained"
+                sx={{ mt: 3, maxWidth: "20rem" }}
+                onClick={getYoutubeTranscript}
+              >
+                Get transcript
+              </Button>
+              <Button
+                variant="contained"
+                sx={{ mt: 3, maxWidth: "20rem" }}
+                onClick={(e) => getYoutubeTranscript(e, true)}
+              >
+                Get Transcript and Summary
+              </Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                sx={{ mt: 3, maxWidth: "20rem" }}
+                onClick={() => {
+                  setUseTextboxContent(true);
+                  setPromptText(defaultTextSummaryPrompt);
+                  setTranscriptText('');
+                  setSummaryText('');
+                  setUrlText('');
+                  setTextboxContent('');
+                }}
+              >
+                Switch to using textbox input as text content
+              </Button>
+            </>)}
+            {useTextboxContent && (<>
+              <Button
+                variant="contained"
+                sx={{ mt: 3, maxWidth: "20rem" }}
+                onClick={getSummaryFromTextboxContent}
+              >
+                Get Summary
+              </Button>
+              <Button
+                variant="contained"
+                color="secondary"
+                sx={{ mt: 3, maxWidth: "20rem" }}
+                onClick={() => {
+                  setUseTextboxContent(false);
+                  setPromptText(defaultYoutubeSummaryPrompt);
+                  setTextboxContent('');
+                  setSummaryText('');
+                  setTranscriptText('');
+                  setUrlText('');
+                }}
+              >
+                Switch to using YouTube summary as text content
+              </Button>
+            </>)}
             {transcriptText !== '' && !isTranscriptError && transcriptText !== 'Fetching transcript...' &&
               <Button
                 variant="contained"
@@ -193,7 +267,29 @@ const Home = () => {
             }
           </Stack>
         </Box>
-        {transcriptText !== '' && <Box
+        <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
+          <form onSubmit={conditionallyHandlePasswordSaveAndProceedToGetSummary}>
+            <DialogTitle>Enter password</DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                To get a summary, provide the API password here.
+              </DialogContentText>
+              <TextField
+                autoFocus
+                name="apiPasswordToSubmit"
+                margin="dense"
+                label="API password"
+                fullWidth
+                variant="standard"
+              />
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={handlePasswordDialogClose}>Cancel</Button>
+              <Button type="submit">Submit</Button>
+            </DialogActions>
+          </form>
+        </Dialog>
+        {(transcriptText !== '' || useTextboxContent) && <Box
           sx={{
             marginTop: 4,
             marginBottom: 4,
@@ -202,30 +298,8 @@ const Home = () => {
             alignItems: 'center',
           }}
         >
-          {!isTranscriptError && transcriptText !== 'Fetching transcript...' &&
+          {((!isTranscriptError && transcriptText !== 'Fetching transcript...') || useTextboxContent) &&
             <>
-              <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
-                <form onSubmit={conditionallyHandlePasswordSaveAndProceedToGetSummary}>
-                  <DialogTitle>Enter password</DialogTitle>
-                  <DialogContent>
-                    <DialogContentText>
-                      To get a summary, provide the API password here.
-                    </DialogContentText>
-                    <TextField
-                      autoFocus
-                      name="apiPasswordToSubmit"
-                      margin="dense"
-                      label="API password"
-                      fullWidth
-                      variant="standard"
-                    />
-                  </DialogContent>
-                  <DialogActions>
-                    <Button onClick={handlePasswordDialogClose}>Cancel</Button>
-                    <Button type="submit">Submit</Button>
-                  </DialogActions>
-                </form>
-              </Dialog>
               {!isSummaryError && summaryText !== '' &&
                 <>
                   {summaryAlert.message !== '' &&
@@ -261,6 +335,10 @@ const Home = () => {
                   {summaryText}
                 </Alert>
               }
+            </>
+          }
+          {!isTranscriptError && transcriptText !== '' && (
+            <>
               <Button
                 onClick={() => navigator.clipboard.writeText(transcriptText)}
                 variant="outlined"
@@ -268,11 +346,11 @@ const Home = () => {
               >
                 Copy transcript to clipboard
               </Button>
+              <Typography>
+                {transcriptText}
+              </Typography>
             </>
-          }
-          {!isTranscriptError && <Typography>
-            {transcriptText}
-          </Typography>}
+          )}
           {isTranscriptError && <Alert
             severity="error"
           >
