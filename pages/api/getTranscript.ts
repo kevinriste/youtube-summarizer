@@ -1,7 +1,7 @@
 // Next.js API route support: https://nextjs.org/docs/api-routes/introduction
 import type { NextApiRequest, NextApiResponse } from 'next'
 import getVideoId from 'get-video-id';
-import YoutubeTranscript from 'youtube-transcript';
+import { YoutubeTranscript } from 'youtube-transcript';
 
 const handler = async (
   req: NextApiRequest,
@@ -17,8 +17,7 @@ const handler = async (
       const { id: ytVideoId } = getVideoId(ytUrlInput);
 
       const transcriptFromNpmVideoId = await YoutubeTranscript.fetchTranscript(ytVideoId || '', {
-        lang: 'en',
-        country: 'US'
+        lang: 'en'
       });
 
       const finalTranscript = transcriptFromNpmVideoId.map(transcriptPart => transcriptPart.text).join(' ');
