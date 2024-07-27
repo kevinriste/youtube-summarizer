@@ -1,4 +1,3 @@
-version: '3.3'
 services:
     yt-transcribe-klt-pw:
         restart: always
@@ -12,5 +11,5 @@ services:
 
 networks:
   default:
-    external:
-      name: nginx-proxy-certbot-docker_default
+    name: nginx-proxy-certbot-docker_default
+    external: true
