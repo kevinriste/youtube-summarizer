@@ -2,6 +2,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import getVideoId from 'get-video-id';
 import { YoutubeTranscript } from 'youtube-transcript';
+import { decode } from 'html-entities';
 
 const handler = async (
   req: NextApiRequest,
@@ -20,7 +21,9 @@ const handler = async (
         lang: 'en'
       });
 
-      const finalTranscript = transcriptFromNpmVideoId.map(transcriptPart => transcriptPart.text).join(' ');
+      const joinedTranscript = transcriptFromNpmVideoId.map(transcriptPart => transcriptPart.text).join(' ');
+
+      const finalTranscript = decode(decode(joinedTranscript));
 
       res.status(200).json(finalTranscript)
     } catch (error: any) {
