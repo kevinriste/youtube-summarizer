@@ -12,6 +12,7 @@ import DialogContent from '@mui/material/DialogContent';
 import DialogContentText from '@mui/material/DialogContentText';
 import DialogTitle from '@mui/material/DialogTitle';
 import { Stack } from '@mui/material';
+import Markdown from 'react-markdown';
 
 const Home = () => {
   const getYoutubeTranscript = async (event: React.MouseEvent<HTMLButtonElement>, alsoGetSummary: boolean = false) => {
@@ -117,6 +118,32 @@ const Home = () => {
   const [summaryAlert, setSummaryAlert] = React.useState<{ message: string, level: AlertColor }>({ message: '', level: 'info' })
 
   const [passwordDialogIsOpen, setPasswordDialogIsOpen] = React.useState(false);
+
+  const markdownRef = React.useRef<HTMLDivElement>(null);
+
+  const copyToClipboard = async () => {
+    if (navigator.clipboard && navigator.clipboard.write) {
+      if (markdownRef.current) {
+        const htmlContent = markdownRef.current.innerHTML;
+        const plainTextContent = markdownRef.current.innerText;
+
+        try {
+          await navigator.clipboard.write([
+            new ClipboardItem({
+              'text/html': new Blob([htmlContent], { type: 'text/html' }),
+              'text/plain': new Blob([plainTextContent], { type: 'text/plain' }),
+            })
+          ]);
+        } catch (err) {
+          console.error('Failed to copy: ', err);
+          alert('Failed to copy rich text! See console for error. Copying plain text.');
+          navigator.clipboard.writeText(summaryText);
+        }
+      }
+    } else {
+      alert('Clipboard API not supported on this browser! Cannot copy to clipboard.');
+    }
+  };
 
   const handleUrlChange = (event) => {
     setUrlText(event.target.value);
@@ -311,20 +338,15 @@ const Home = () => {
                     </Alert>
                   }
                   <Button
-                    onClick={() => navigator.clipboard.writeText(summaryText)}
+                    onClick={() => copyToClipboard()}
                     variant="outlined"
                     sx={{ mb: 2 }}
                   >
                     Copy summary to clipboard
                   </Button>
-                  <Typography sx={{ mb: 2 }}>
-                    {summaryText.split('\n').map((line, index) => (
-                      <span key={index}>
-                        {line}
-                        <br />
-                      </span>
-                    ))}
-                  </Typography>
+                  <div ref={markdownRef}>
+                    <Markdown>{summaryText}</Markdown>
+                  </div>
                 </>
               }
               {isSummaryError &&
