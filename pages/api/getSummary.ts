@@ -1,5 +1,4 @@
-// Next.js API route support: https://nextjs.org/docs/api-routes/introduction
-import type { NextApiRequest, NextApiResponse } from 'next'
+import type { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI, { toFile } from 'openai';
 import { encode } from 'gpt-tokenizer';
 
@@ -36,8 +35,8 @@ const handler = async (
     let summary: any = '';
 
     if (inputPassword === process.env.API_PASSWORD) {
-      let prompt = '### START TRANSCRIPT ### ' + transcript
-      const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt
+      let prompt = '### START TRANSCRIPT ### ' + transcript;
+      const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt;
       const tokensInEndOfTranscript = encode(endOfTranscript).length;
       const encodedPrompt = encode(prompt);
       let tokenCount = encodedPrompt.length;
@@ -45,10 +44,10 @@ const handler = async (
 
       if ((tokenCount + openAiMaxResponseTokens + tokensInEndOfTranscript) > openAiMaxTotalTokens) {
         messageIsBelowTokenLimit = false;
-        console.log("Using assistant method due to long transcript.")
+        console.log("Using assistant method due to long transcript.");
       }
 
-      prompt = prompt + endOfTranscript
+      prompt = prompt + endOfTranscript;
 
       if (messageIsBelowTokenLimit) {
         const completion = await openai.chat.completions.create({
@@ -61,24 +60,24 @@ const handler = async (
 
         res.status(200).json({
           summary
-        })
+        });
       } else {
         const buffer = Buffer.from(transcript);
 
-        console.log("Uploading transcript as file for assistant.")
+        console.log("Uploading transcript as file for assistant.");
         const file = await openai.files.create({
           file: await toFile(buffer, 'transcript.txt'),
           purpose: "assistants",
         });
 
-        console.log("Creating assistant.")
+        console.log("Creating assistant.");
         const assistant = await openai.beta.assistants.create({
           model: process.env.OPENAI_MODEL || '',
           file_ids: [file.id],
           tools: [{ "type": "retrieval" }],
         });
 
-        console.log("Creating thread.")
+        console.log("Creating thread.");
         const thread = await openai.beta.threads.create({
           messages: [
             {
@@ -89,7 +88,7 @@ const handler = async (
           ]
         });
 
-        console.log("Creating assistant-thread run.")
+        console.log("Creating assistant-thread run.");
         const run = await openai.beta.threads.runs.create(
           thread.id,
           { assistant_id: assistant.id }
@@ -101,14 +100,14 @@ const handler = async (
           assistantId: assistant.id,
           fileId: file.id,
           status: run.status,
-        })
+        });
       }
     } else if (threadId !== '' && runId !== '' && assistantId !== '' && fileId !== '') {
       const followUpRun = await openai.beta.threads.runs.retrieve(
         threadId,
         runId,
       );
-      console.log(`Run status: ${followUpRun.status}`)
+      console.log(`Run status: ${followUpRun.status}`);
 
       if (followUpRun.status !== "completed") {
         res.status(200).json({
@@ -117,7 +116,7 @@ const handler = async (
           assistantId: assistantId,
           fileId: fileId,
           status: followUpRun.status,
-        })
+        });
       } else {
         const allMessages = await openai.beta.threads.messages.list(threadId);
 
@@ -126,13 +125,13 @@ const handler = async (
         }
 
         try {
-          console.log("Deleting uploaded file.")
+          console.log("Deleting uploaded file.");
           await openai.beta.assistants.files.del(
             assistantId,
             fileId,
           );
         } catch (error: any) {
-          console.error("Error deleting file, not elevated since it doesn't affect the user experience.")
+          console.error("Error deleting file, not elevated since it doesn't affect the user experience.");
           if (error.response) {
             console.error(error.response.status);
             console.error(error.response.data);
@@ -141,12 +140,12 @@ const handler = async (
           }
         }
 
-        console.log("Request completed.")
+        console.log("Request completed.");
 
         res.status(200).json({
           summary,
           message: 'Processing complete',
-        })
+        });
       }
     } else res.status(500).send('Incorrect API password provided or missing previous request information');
   } catch (error: any) {
