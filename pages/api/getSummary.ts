@@ -73,8 +73,7 @@ const handler = async (
         console.log("Creating assistant.");
         const assistant = await openai.beta.assistants.create({
           model: process.env.OPENAI_MODEL || '',
-          file_ids: [file.id],
-          tools: [{ "type": "retrieval" }],
+          tools: [{ type: "file_search" }],
         });
 
         console.log("Creating thread.");
@@ -83,7 +82,7 @@ const handler = async (
             {
               "role": "user",
               "content": userPrompt,
-              "file_ids": [file.id]
+              attachments: [{ file_id: file.id, tools: [{ type: "file_search" }] }]
             }
           ]
         });
@@ -126,8 +125,7 @@ const handler = async (
 
         try {
           console.log("Deleting uploaded file.");
-          await openai.beta.assistants.files.del(
-            assistantId,
+          await openai.files.del(
             fileId,
           );
         } catch (error: any) {
