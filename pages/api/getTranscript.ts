@@ -49,6 +49,8 @@ const handler = async (
 
     const finalTranscript = decode(decode(joinedTranscript));
 
+    if (finalTranscript === "") throw new Error('Transcript service returned an empty result. Try again.');
+
     res.status(200).json(finalTranscript);
   } catch (error: any) {
     console.error(error);
