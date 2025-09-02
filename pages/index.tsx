@@ -92,7 +92,7 @@ const Home = () => {
   React.useEffect(() => {
     let interval;
     if (pendingRequestData) {
-      interval = setInterval(() => getTranscriptSummary(), 2000); // Poll every 5 seconds
+      interval = setInterval(() => getTranscriptSummary(), 2000); // Poll every x milliseconds
     } else {
       clearInterval(interval);
     }
@@ -306,6 +306,7 @@ const Home = () => {
                 name="apiPasswordToSubmit"
                 margin="dense"
                 label="API password"
+                type="password"
                 fullWidth
                 variant="standard"
               />
