@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import getVideoId from 'get-video-id';
-import { YoutubeTranscript, YoutubeTranscriptNotAvailableLanguageError } from 'youtube-transcript';
+import { YoutubeTranscript, YoutubeTranscriptNotAvailableLanguageError } from '@danielxceron/youtube-transcript';
 import { decode } from 'html-entities';
 
 const handler = async (
