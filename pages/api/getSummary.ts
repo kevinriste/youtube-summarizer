@@ -125,7 +125,7 @@ const handler = async (
 
         try {
           console.log("Deleting uploaded file.");
-          await openai.files.del(
+          await openai.files.delete(
             fileId,
           );
         } catch (error: any) {
