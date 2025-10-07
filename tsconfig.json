@@ -17,6 +17,12 @@
     "baseUrl": ".",
     "noImplicitAny": false
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx"],
+  "include": [
+      "next-env.d.ts",
+      "**/*.ts",
+      "**/*.tsx",
+      "eslint.config.mjs",
+      "next.config.js"
+  ],
   "exclude": ["node_modules"]
 }
