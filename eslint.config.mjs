@@ -14,9 +14,9 @@ export default defineConfig([
     languageOptions: { parserOptions: { projectService: true } },
   },
   eslint.configs.recommended,
-  ...tseslint.configs.strictTypeChecked,
-  ...tseslint.configs.stylisticTypeChecked,
   ...compat.config({
     extends: ['next/core-web-vitals', 'next/typescript'],
   }),
+  ...tseslint.configs.strictTypeChecked,
+  ...tseslint.configs.stylisticTypeChecked,
 ]);
