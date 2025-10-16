@@ -89,7 +89,7 @@ const handler = async (
           const completion = await openai.chat.completions.create({
             model: ENV.OPENAI_MODEL,
             messages: [{ role: "user", content: prompt }],
-            max_tokens: openAiMaxResponseTokens,
+            max_completion_tokens: openAiMaxResponseTokens,
           });
 
           const summary = completion.choices[0].message.content;
