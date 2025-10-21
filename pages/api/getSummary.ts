@@ -53,7 +53,7 @@ const handler = async (
         const completion = await openai.chat.completions.create({
           model: process.env.OPENAI_MODEL || '',
           messages: [{ role: "user", content: prompt }],
-          max_tokens: openAiMaxResponseTokens,
+          max_completion_tokens: openAiMaxResponseTokens,
         });
 
         summary = completion.choices[0].message.content;
@@ -125,7 +125,7 @@ const handler = async (
 
         try {
           console.log("Deleting uploaded file.");
-          await openai.files.del(
+          await openai.files.delete(
             fileId,
           );
         } catch (error: any) {
