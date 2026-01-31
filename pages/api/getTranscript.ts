@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import getVideoId from 'get-video-id';
-import { YoutubeTranscript, YoutubeTranscriptNotAvailableLanguageError } from '@danielxceron/youtube-transcript';
+import { getVideoId } from '@uandi/video-id';
+import { fetchTranscript, YoutubeTranscriptNotAvailableLanguageError } from 'youtube-transcript-plus';
 import { decode } from 'html-entities';
 
 const handler = async (
@@ -16,29 +16,27 @@ const handler = async (
   }
 
   try {
-    const { id: ytVideoId } = getVideoId(ytUrlInput);
+    const ytVideoId = getVideoId(ytUrlInput).id || ytUrlInput;
 
     let transcriptFromNpmVideoId;
     try {
-      transcriptFromNpmVideoId = await YoutubeTranscript.fetchTranscript(ytVideoId || '', {
+      transcriptFromNpmVideoId = await fetchTranscript(ytVideoId, {
         lang: 'en'
       });
     } catch (error: any) {
       if (error instanceof YoutubeTranscriptNotAvailableLanguageError) {
-        const availableLangsMatch = error.message.match(/Available languages: (.+)/);
-        if (availableLangsMatch) {
+        try {
+          const availableLangsMatch = error.message.match(/Available languages:\s*([^.]*)/);
+          if (!availableLangsMatch) throw new Error('No available languages could be parsed from the error message.');
           const availableLangs = availableLangsMatch[1].split(',').map(lang => lang.trim());
           console.log('Retrying with available languages:', availableLangs);
-          if (availableLangs.length > 0) {
-            // Retry with the first available language
-            transcriptFromNpmVideoId = await YoutubeTranscript.fetchTranscript(ytVideoId || '', {
-              lang: availableLangs[0]
-            });
-          } else {
+          if (availableLangs.length === 0) {
             throw new Error('No transcripts available in any language for this video.');
           }
-        } else {
-          throw new Error('No available languages could be parsed from the error message.');
+          transcriptFromNpmVideoId = await fetchTranscript(ytVideoId, { lang: availableLangs[0] });
+        } catch (langError) {
+          console.warn('Language-specific retry failed; retrying without language.', langError);
+          transcriptFromNpmVideoId = await fetchTranscript(ytVideoId);
         }
       } else {
         throw error;
