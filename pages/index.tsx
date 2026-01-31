@@ -1,26 +1,29 @@
-import * as React from 'react';
-import Button from '@mui/material/Button';
-import TextField from '@mui/material/TextField';
-import Box from '@mui/material/Box';
-import Alert, { AlertColor } from '@mui/material/Alert';
-import Typography from '@mui/material/Typography';
-import Container from '@mui/material/Container';
-import Head from 'next/head'
-import Dialog from '@mui/material/Dialog';
-import DialogActions from '@mui/material/DialogActions';
-import DialogContent from '@mui/material/DialogContent';
-import DialogContentText from '@mui/material/DialogContentText';
-import DialogTitle from '@mui/material/DialogTitle';
-import { Stack } from '@mui/material';
-import Markdown from 'react-markdown';
+import * as React from "react";
+import Button from "@mui/material/Button";
+import TextField from "@mui/material/TextField";
+import Box from "@mui/material/Box";
+import Alert, { AlertColor } from "@mui/material/Alert";
+import Typography from "@mui/material/Typography";
+import Container from "@mui/material/Container";
+import Head from "next/head";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogContentText from "@mui/material/DialogContentText";
+import DialogTitle from "@mui/material/DialogTitle";
+import { Stack } from "@mui/material";
+import Markdown from "react-markdown";
 
 const Home = () => {
-  const getYoutubeTranscript = async (event: React.MouseEvent<HTMLButtonElement>, alsoGetSummary: boolean = false) => {
+  const getYoutubeTranscript = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+    alsoGetSummary: boolean = false,
+  ) => {
     event.preventDefault();
-    setTranscriptText('Fetching transcript...')
-    setSummaryText('')
-    setisTranscriptError(false)
-    setIsSummaryError(false)
+    setTranscriptText("Fetching transcript...");
+    setSummaryText("");
+    setisTranscriptError(false);
+    setIsSummaryError(false);
     const dataToSubmit = {
       yturl: urlText,
     };
@@ -30,37 +33,41 @@ const Home = () => {
     });
     if (response.ok) {
       const responseJson = await response.json();
-      setTranscriptText(responseJson)
-      if (alsoGetSummary) ensurePasswordExistsForGetSummary(undefined, responseJson);
-    }
-    else {
+      setTranscriptText(responseJson);
+      if (alsoGetSummary)
+        ensurePasswordExistsForGetSummary(undefined, responseJson);
+    } else {
       const responseError = await response.text();
       console.error(responseError);
-      setisTranscriptError(true)
-      setTranscriptText(responseError.toString())
+      setisTranscriptError(true);
+      setTranscriptText(responseError.toString());
     }
   };
 
-  const getSummaryFromTextboxContent = async (event: React.MouseEvent<HTMLButtonElement>) => {
+  const getSummaryFromTextboxContent = async (
+    event: React.MouseEvent<HTMLButtonElement>,
+  ) => {
     event.preventDefault();
-    setSummaryText('')
-    setIsSummaryError(false)
+    setSummaryText("");
+    setIsSummaryError(false);
     ensurePasswordExistsForGetSummary(undefined, textboxContent);
   };
 
   // Allow option to directly pass in transcript text in case state updates are slow
   // to ensure it's present before we request the summary
-  const getTranscriptSummary = async (directlyPassedTranscriptText?: string) => {
+  const getTranscriptSummary = async (
+    directlyPassedTranscriptText?: string,
+  ) => {
     let dataToSubmit = {};
     if (!pendingRequestData) {
-      setSummaryText('Fetching summary...')
-      setSummaryAlert({ message: '', level: 'info' })
-      setIsSummaryError(false)
-      const passwordToSubmitToApi = localStorage.getItem("apiPassword")
+      setSummaryText("Fetching summary...");
+      setSummaryAlert({ message: "", level: "info" });
+      setIsSummaryError(false);
+      const passwordToSubmitToApi = localStorage.getItem("apiPassword");
       dataToSubmit = {
         transcript: directlyPassedTranscriptText ?? transcriptText,
         userPrompt: promptText,
-        passwordToSubmitToApi
+        passwordToSubmitToApi,
       };
     } else {
       dataToSubmit = pendingRequestData;
@@ -71,21 +78,34 @@ const Home = () => {
     });
     if (response.ok) {
       const responseJson = await response.json();
-      const keysExpectedIfResponseIsPending = ['threadId', 'runId', 'assistantId', 'fileId', 'status'];
-      if (keysExpectedIfResponseIsPending.every(key => responseJson.hasOwnProperty(key))) {
+      const keysExpectedIfResponseIsPending = [
+        "threadId",
+        "runId",
+        "assistantId",
+        "fileId",
+        "status",
+      ];
+      if (
+        keysExpectedIfResponseIsPending.every((key) =>
+          responseJson.hasOwnProperty(key),
+        )
+      ) {
         setPendingRequestData(responseJson);
-        setSummaryAlert({ message: `Processing using OpenAI Assistant due to long text; request is pending and updates will appear here. Current status: ${responseJson.status}`, level: "info" })
+        setSummaryAlert({
+          message: `Processing using OpenAI Assistant due to long text; request is pending and updates will appear here. Current status: ${responseJson.status}`,
+          level: "info",
+        });
       } else {
         setPendingRequestData(undefined);
-        setSummaryText(responseJson.summary)
+        setSummaryText(responseJson.summary);
       }
-      if ((responseJson?.message || '') !== '') setSummaryAlert({ message: responseJson.message, level: "info" })
-    }
-    else {
+      if ((responseJson?.message || "") !== "")
+        setSummaryAlert({ message: responseJson.message, level: "info" });
+    } else {
       const responseError = await response.text();
       console.error(responseError);
-      setIsSummaryError(true)
-      setSummaryText(responseError.toString())
+      setIsSummaryError(true);
+      setSummaryText(responseError.toString());
     }
   };
 
@@ -99,23 +119,30 @@ const Home = () => {
     return () => clearInterval(interval);
   });
 
-  const defaultYoutubeSummaryPrompt = 'Please provide a bulleted list of the main points from the above YouTube transcript.';
-  const defaultTextSummaryPrompt = 'Please provide a bulleted list of the main points from the above text.';
+  const defaultYoutubeSummaryPrompt =
+    "Please provide a bulleted list of the main points from the above YouTube transcript.";
+  const defaultTextSummaryPrompt =
+    "Please provide a bulleted list of the main points from the above text.";
 
   const [isTranscriptError, setisTranscriptError] = React.useState(false);
-  const [transcriptText, setTranscriptText] = React.useState('');
+  const [transcriptText, setTranscriptText] = React.useState("");
 
   const [isSummaryError, setIsSummaryError] = React.useState(false);
-  const [summaryText, setSummaryText] = React.useState('');
+  const [summaryText, setSummaryText] = React.useState("");
   const [pendingRequestData, setPendingRequestData] = React.useState();
 
-  const [urlText, setUrlText] = React.useState('');
-  const [promptText, setPromptText] = React.useState(defaultYoutubeSummaryPrompt);
+  const [urlText, setUrlText] = React.useState("");
+  const [promptText, setPromptText] = React.useState(
+    defaultYoutubeSummaryPrompt,
+  );
 
-  const [textboxContent, setTextboxContent] = React.useState('');
+  const [textboxContent, setTextboxContent] = React.useState("");
   const [useTextboxContent, setUseTextboxContent] = React.useState(false);
 
-  const [summaryAlert, setSummaryAlert] = React.useState<{ message: string, level: AlertColor }>({ message: '', level: 'info' })
+  const [summaryAlert, setSummaryAlert] = React.useState<{
+    message: string;
+    level: AlertColor;
+  }>({ message: "", level: "info" });
 
   const [passwordDialogIsOpen, setPasswordDialogIsOpen] = React.useState(false);
 
@@ -130,18 +157,24 @@ const Home = () => {
         try {
           await navigator.clipboard.write([
             new ClipboardItem({
-              'text/html': new Blob([htmlContent], { type: 'text/html' }),
-              'text/plain': new Blob([plainTextContent], { type: 'text/plain' }),
-            })
+              "text/html": new Blob([htmlContent], { type: "text/html" }),
+              "text/plain": new Blob([plainTextContent], {
+                type: "text/plain",
+              }),
+            }),
           ]);
         } catch (err) {
-          console.error('Failed to copy: ', err);
-          alert('Failed to copy rich text! See console for error. Copying plain text.');
+          console.error("Failed to copy: ", err);
+          alert(
+            "Failed to copy rich text! See console for error. Copying plain text.",
+          );
           navigator.clipboard.writeText(summaryText);
         }
       }
     } else {
-      alert('Clipboard API not supported on this browser! Cannot copy to clipboard.');
+      alert(
+        "Clipboard API not supported on this browser! Cannot copy to clipboard.",
+      );
     }
   };
 
@@ -157,24 +190,39 @@ const Home = () => {
     setTextboxContent(event.target.value);
   };
 
-  const ensurePasswordExistsForGetSummary = (event?: React.MouseEvent<HTMLButtonElement>, directlyPassedTranscriptText?: string) => {
+  const ensurePasswordExistsForGetSummary = (
+    event?: React.MouseEvent<HTMLButtonElement>,
+    directlyPassedTranscriptText?: string,
+  ) => {
     if (event) event.preventDefault();
     const apiPassword = localStorage.getItem("apiPassword");
     if (!apiPassword) setPasswordDialogIsOpen(true);
-    else conditionallyHandlePasswordSaveAndProceedToGetSummary(undefined, directlyPassedTranscriptText);
+    else
+      conditionallyHandlePasswordSaveAndProceedToGetSummary(
+        undefined,
+        directlyPassedTranscriptText,
+      );
   };
 
   const handlePasswordDialogClose = () => {
     setPasswordDialogIsOpen(false);
   };
-  const conditionallyHandlePasswordSaveAndProceedToGetSummary = (event?: React.FormEvent<HTMLFormElement>, directlyPassedTranscriptText?: string) => {
+  const conditionallyHandlePasswordSaveAndProceedToGetSummary = (
+    event?: React.FormEvent<HTMLFormElement>,
+    directlyPassedTranscriptText?: string,
+  ) => {
     if (event) {
-      event.preventDefault()
+      event.preventDefault();
       setPasswordDialogIsOpen(false);
       const data = new FormData(event.currentTarget);
-      const apiPasswordToSubmit = data.get('apiPasswordToSubmit');
-      if (typeof apiPasswordToSubmit === 'string') localStorage.setItem("apiPassword", apiPasswordToSubmit);
-      else localStorage.setItem("apiPassword", JSON.stringify(apiPasswordToSubmit));
+      const apiPasswordToSubmit = data.get("apiPasswordToSubmit");
+      if (typeof apiPasswordToSubmit === "string")
+        localStorage.setItem("apiPassword", apiPasswordToSubmit);
+      else
+        localStorage.setItem(
+          "apiPassword",
+          JSON.stringify(apiPasswordToSubmit),
+        );
     }
     getTranscriptSummary(directlyPassedTranscriptText);
   };
@@ -188,39 +236,43 @@ const Home = () => {
         sx={{
           marginTop: 8,
           marginBottom: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
         }}
       >
         <Typography component="h1" variant="h5">
           AI Summarizer
         </Typography>
-        <Box sx={{ mt: 1, width: '100%' }}>
+        <Box sx={{ mt: 1, width: "100%" }}>
           <Stack spacing={2} alignItems="center">
-            {!useTextboxContent && (<>
-              <TextField
-                margin="normal"
-                fullWidth
-                label="YouTube URL"
-                autoFocus
-                value={urlText}
-                onChange={handleUrlChange}
-              />
-            </>)}
-            {useTextboxContent && (<>
-              <TextField
-                margin="normal"
-                fullWidth
-                label="Text input"
-                autoFocus
-                multiline
-                minRows={4}
-                maxRows={10}
-                value={textboxContent}
-                onChange={handleTextboxContentChange}
-              />
-            </>)}
+            {!useTextboxContent && (
+              <>
+                <TextField
+                  margin="normal"
+                  fullWidth
+                  label="YouTube URL"
+                  autoFocus
+                  value={urlText}
+                  onChange={handleUrlChange}
+                />
+              </>
+            )}
+            {useTextboxContent && (
+              <>
+                <TextField
+                  margin="normal"
+                  fullWidth
+                  label="Text input"
+                  autoFocus
+                  multiline
+                  minRows={4}
+                  maxRows={10}
+                  value={textboxContent}
+                  onChange={handleTextboxContentChange}
+                />
+              </>
+            )}
             <TextField
               margin="normal"
               fullWidth
@@ -228,74 +280,82 @@ const Home = () => {
               value={promptText}
               onChange={handlePromptChange}
             />
-            {!useTextboxContent && (<>
-              <Button
-                variant="contained"
-                sx={{ mt: 3, maxWidth: "20rem" }}
-                onClick={getYoutubeTranscript}
-              >
-                Get transcript
-              </Button>
-              <Button
-                variant="contained"
-                sx={{ mt: 3, maxWidth: "20rem" }}
-                onClick={(e) => getYoutubeTranscript(e, true)}
-              >
-                Get Transcript and Summary
-              </Button>
-              <Button
-                variant="contained"
-                color="secondary"
-                sx={{ mt: 3, maxWidth: "20rem" }}
-                onClick={() => {
-                  setUseTextboxContent(true);
-                  setPromptText(defaultTextSummaryPrompt);
-                  setTranscriptText('');
-                  setSummaryText('');
-                  setUrlText('');
-                  setTextboxContent('');
-                }}
-              >
-                Switch to using textbox input as text content
-              </Button>
-            </>)}
-            {useTextboxContent && (<>
-              <Button
-                variant="contained"
-                sx={{ mt: 3, maxWidth: "20rem" }}
-                onClick={getSummaryFromTextboxContent}
-              >
-                Get Summary
-              </Button>
-              <Button
-                variant="contained"
-                color="secondary"
-                sx={{ mt: 3, maxWidth: "20rem" }}
-                onClick={() => {
-                  setUseTextboxContent(false);
-                  setPromptText(defaultYoutubeSummaryPrompt);
-                  setTextboxContent('');
-                  setSummaryText('');
-                  setTranscriptText('');
-                  setUrlText('');
-                }}
-              >
-                Switch to using YouTube summary as text content
-              </Button>
-            </>)}
-            {transcriptText !== '' && !isTranscriptError && transcriptText !== 'Fetching transcript...' &&
-              <Button
-                variant="contained"
-                sx={{ mb: 2, maxWidth: "20rem" }}
-                onClick={ensurePasswordExistsForGetSummary}
-              >
-                Get Summary
-              </Button>
-            }
+            {!useTextboxContent && (
+              <>
+                <Button
+                  variant="contained"
+                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  onClick={getYoutubeTranscript}
+                >
+                  Get transcript
+                </Button>
+                <Button
+                  variant="contained"
+                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  onClick={(e) => getYoutubeTranscript(e, true)}
+                >
+                  Get Transcript and Summary
+                </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  onClick={() => {
+                    setUseTextboxContent(true);
+                    setPromptText(defaultTextSummaryPrompt);
+                    setTranscriptText("");
+                    setSummaryText("");
+                    setUrlText("");
+                    setTextboxContent("");
+                  }}
+                >
+                  Switch to using textbox input as text content
+                </Button>
+              </>
+            )}
+            {useTextboxContent && (
+              <>
+                <Button
+                  variant="contained"
+                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  onClick={getSummaryFromTextboxContent}
+                >
+                  Get Summary
+                </Button>
+                <Button
+                  variant="contained"
+                  color="secondary"
+                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  onClick={() => {
+                    setUseTextboxContent(false);
+                    setPromptText(defaultYoutubeSummaryPrompt);
+                    setTextboxContent("");
+                    setSummaryText("");
+                    setTranscriptText("");
+                    setUrlText("");
+                  }}
+                >
+                  Switch to using YouTube summary as text content
+                </Button>
+              </>
+            )}
+            {transcriptText !== "" &&
+              !isTranscriptError &&
+              transcriptText !== "Fetching transcript..." && (
+                <Button
+                  variant="contained"
+                  sx={{ mb: 2, maxWidth: "20rem" }}
+                  onClick={ensurePasswordExistsForGetSummary}
+                >
+                  Get Summary
+                </Button>
+              )}
           </Stack>
         </Box>
         <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
-          <form onSubmit={conditionallyHandlePasswordSaveAndProceedToGetSummary}>
+          <form
+            onSubmit={conditionallyHandlePasswordSaveAndProceedToGetSummary}
+          >
             <DialogTitle>Enter password</DialogTitle>
             <DialogContent>
               <DialogContentText>
@@ -317,72 +377,66 @@ const Home = () => {
             </DialogActions>
           </form>
         </Dialog>
-        {(transcriptText !== '' || useTextboxContent) && <Box
-          sx={{
-            marginTop: 4,
-            marginBottom: 4,
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-          }}
-        >
-          {((!isTranscriptError && transcriptText !== 'Fetching transcript...') || useTextboxContent) &&
-            <>
-              {!isSummaryError && summaryText !== '' &&
-                <>
-                  {summaryAlert.message !== '' &&
-                    <Alert
-                      severity={summaryAlert.level}
+        {(transcriptText !== "" || useTextboxContent) && (
+          <Box
+            sx={{
+              marginTop: 4,
+              marginBottom: 4,
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+            }}
+          >
+            {((!isTranscriptError &&
+              transcriptText !== "Fetching transcript...") ||
+              useTextboxContent) && (
+              <>
+                {!isSummaryError && summaryText !== "" && (
+                  <>
+                    {summaryAlert.message !== "" && (
+                      <Alert severity={summaryAlert.level} sx={{ mb: 2 }}>
+                        {summaryAlert.message}
+                      </Alert>
+                    )}
+                    <Button
+                      onClick={() => copyToClipboard()}
+                      variant="outlined"
                       sx={{ mb: 2 }}
                     >
-                      {summaryAlert.message}
-                    </Alert>
-                  }
-                  <Button
-                    onClick={() => copyToClipboard()}
-                    variant="outlined"
-                    sx={{ mb: 2 }}
-                  >
-                    Copy summary to clipboard
-                  </Button>
-                  <div ref={markdownRef}>
-                    <Markdown>{summaryText}</Markdown>
-                  </div>
-                </>
-              }
-              {isSummaryError &&
-                <Alert
-                  severity="error"
+                      Copy summary to clipboard
+                    </Button>
+                    <div ref={markdownRef}>
+                      <Markdown>{summaryText}</Markdown>
+                    </div>
+                  </>
+                )}
+                {isSummaryError && (
+                  <Alert severity="error" sx={{ mb: 2 }}>
+                    {summaryText}
+                  </Alert>
+                )}
+              </>
+            )}
+            {!isTranscriptError && transcriptText !== "" && (
+              <>
+                <Button
+                  onClick={() => navigator.clipboard.writeText(transcriptText)}
+                  variant="outlined"
                   sx={{ mb: 2 }}
                 >
-                  {summaryText}
-                </Alert>
-              }
-            </>
-          }
-          {!isTranscriptError && transcriptText !== '' && (
-            <>
-              <Button
-                onClick={() => navigator.clipboard.writeText(transcriptText)}
-                variant="outlined"
-                sx={{ mb: 2 }}
-              >
-                Copy transcript to clipboard
-              </Button>
-              <Typography>
-                {transcriptText}
-              </Typography>
-            </>
-          )}
-          {isTranscriptError && <Alert
-            severity="error"
-          >
-            {transcriptText}
-          </Alert>}
-        </Box>}
+                  Copy transcript to clipboard
+                </Button>
+                <Typography>{transcriptText}</Typography>
+              </>
+            )}
+            {isTranscriptError && (
+              <Alert severity="error">{transcriptText}</Alert>
+            )}
+          </Box>
+        )}
       </Box>
     </Container>
   );
-}
+};
 
 export default Home;

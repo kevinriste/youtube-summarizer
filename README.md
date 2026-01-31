@@ -17,7 +17,7 @@ It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Doc
   Adjust the instructions sent to the model (e.g., bullet points, key themes, narrative summary).
 
 - **Token-aware fallback**  
-  If a transcript is too long to fit in a single model request, the app automatically uploads the transcript as a file and continues the conversation with an Assistant run.  This ensures long inputs don’t fail silently and summaries are still generated.
+  If a transcript is too long to fit in a single model request, the app automatically uploads the transcript as a file and continues the conversation with an Assistant run. This ensures long inputs don’t fail silently and summaries are still generated.
 
 - **Password-protected API**  
   A configurable API password (stored locally in the browser) ensures only authorized users can generate summaries.
@@ -83,18 +83,18 @@ Make sure to configure `.env.local` before building.
 
 ## Project Structure
 
-- `pages/api/getTranscript.ts` – API route for fetching YouTube transcripts  
-- `pages/api/getSummary.ts` – API route for generating summaries  
-- `pages/index.tsx` – Main UI  
-- `util/theme.ts` – Material UI theme configuration  
-- `util/createEmotionCache.ts` – SSR style caching for Emotion/Material UI  
-- `Dockerfile` – Multi-stage Docker build  
-- `docker-compose.yml` – Example Compose setup with reverse proxy integration  
+- `pages/api/getTranscript.ts` – API route for fetching YouTube transcripts
+- `pages/api/getSummary.ts` – API route for generating summaries
+- `pages/index.tsx` – Main UI
+- `util/theme.ts` – Material UI theme configuration
+- `util/createEmotionCache.ts` – SSR style caching for Emotion/Material UI
+- `Dockerfile` – Multi-stage Docker build
+- `docker-compose.yml` – Example Compose setup with reverse proxy integration
 
 ---
 
 ## Security Notes
 
-- No secrets should be committed. Keep your `.env.local` private.  
-- API password protects summary endpoints; choose a strong value.  
-- For production, consider rate limiting and HTTPS via a reverse proxy.  
+- No secrets should be committed. Keep your `.env.local` private.
+- API password protects summary endpoints; choose a strong value.
+- For production, consider rate limiting and HTTPS via a reverse proxy.
