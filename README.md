@@ -8,7 +8,7 @@ It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Doc
 ## Features
 
 - **YouTube transcript extraction**  
-  Paste a YouTube URL and the app fetches and cleans the transcript automatically.
+  Paste a YouTube URL (or video ID) and the app fetches and cleans the transcript automatically using `youtube-transcript-plus`.
 
 - **Text input mode**  
   Switch from YouTube mode to paste raw text for summarization.
@@ -30,6 +30,9 @@ It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Doc
 
 - **Responsive design**  
   Works well on both desktop and mobile layouts, using Material UI’s responsive grid system.
+
+- **Language fallback for transcripts**  
+  If the requested language isn’t available, the app retries using the first available caption language, and falls back to a no-language request if parsing fails.
 
 ---
 
@@ -98,3 +101,19 @@ Make sure to configure `.env.local` before building.
 - No secrets should be committed. Keep your `.env.local` private.
 - API password protects summary endpoints; choose a strong value.
 - For production, consider rate limiting and HTTPS via a reverse proxy.
+
+---
+
+## Transcript Notes
+
+- The transcript API accepts YouTube URLs or raw video IDs. It resolves IDs using `@uandi/video-id`.
+- Some videos have captions disabled or only in non-English languages; in those cases, the app will fall back to any available language.
+- If YouTube rate-limits requests, retry later or consider proxying at the `youtube-transcript-plus` layer.
+
+## Formatting
+
+Run Prettier from the repo root:
+
+```bash
+npx prettier . --write
+```
