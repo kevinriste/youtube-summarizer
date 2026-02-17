@@ -297,10 +297,13 @@ const Home = () => {
       md += "\n## Conversation\n";
       for (let i = 0; i < followUpMessages.length; i++) {
         const msg = followUpMessages[i];
+        const cancelled = msg.cancelled ? " *(cancelled)*" : "";
         if (msg.role === "user") {
-          md += (i === 0 ? "\n" : "\n---\n\n") + "**You:** " + msg.content + "\n";
+          const content = msg.cancelled ? `*${msg.content}*` : msg.content;
+          md += (i === 0 ? "\n" : "\n---\n\n") + "**You:**" + cancelled + " " + content + "\n";
         } else if (msg.role === "assistant") {
-          md += "\n**AI:** " + msg.content + "\n";
+          const content = msg.cancelled ? `*${msg.content}*` : msg.content;
+          md += "\n**AI:**" + cancelled + " " + content + "\n";
         }
       }
     }
