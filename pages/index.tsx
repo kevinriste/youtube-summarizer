@@ -169,14 +169,14 @@ const Home = () => {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
     }
-    // Mark the last user message as cancelled, and save any partial response
+    // If no response started, mark the user message as cancelled.
+    // If a partial response exists, save it as cancelled but leave the user message alone.
     setFollowUpMessages((prev) => {
       const updated = [...prev];
-      if (updated.length > 0 && updated[updated.length - 1].role === "user") {
-        updated[updated.length - 1] = { ...updated[updated.length - 1], cancelled: true };
-      }
       if (streamingText) {
         updated.push({ role: "assistant", content: streamingText, cancelled: true });
+      } else if (updated.length > 0 && updated[updated.length - 1].role === "user") {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], cancelled: true };
       }
       return updated;
     });
@@ -701,6 +701,8 @@ const Home = () => {
                             if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
                               sendFollowUp();
+                            } else if (e.key === "Escape" && isStreaming) {
+                              cancelFollowUp();
                             }
                           }}
                           multiline
