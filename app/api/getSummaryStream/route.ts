@@ -45,11 +45,25 @@ export async function POST(request: Request) {
     let buffer = "";
 
     const readable = new ReadableStream({
+      cancel() {
+        stream.controller.abort();
+      },
       async start(controller) {
+        let closed = false;
         const send = (data: Record<string, unknown>) => {
-          controller.enqueue(
-            encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
-          );
+          if (closed) return;
+          try {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+            );
+          } catch {
+            closed = true;
+          }
+        };
+        const close = () => {
+          if (closed) return;
+          closed = true;
+          controller.close();
         };
 
         try {
@@ -76,7 +90,7 @@ export async function POST(request: Request) {
           console.error("Stream processing error:", err.message);
           send({ type: "error", message: err.message });
         } finally {
-          controller.close();
+          close();
         }
       },
     });
