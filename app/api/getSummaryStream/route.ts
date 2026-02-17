@@ -1,0 +1,97 @@
+import OpenAI from "openai";
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { transcript, userPrompt, messages, passwordToSubmitToApi } = body;
+
+    if (passwordToSubmitToApi !== process.env.API_PASSWORD) {
+      return new Response("Incorrect API password", { status: 401 });
+    }
+
+    let input: Array<{ role: string; content: string }>;
+
+    if (messages && Array.isArray(messages)) {
+      // Follow-up conversation with full history
+      input = messages;
+    } else {
+      if (!transcript) {
+        return new Response("No transcript provided", { status: 400 });
+      }
+      const prompt =
+        "### START TRANSCRIPT ### " +
+        transcript +
+        " ### END TRANSCRIPT ### " +
+        (userPrompt || "");
+      input = [{ role: "user", content: prompt }];
+    }
+
+    const maxOutputTokens = parseInt(
+      process.env.OPENAI_MAX_RESPONSE_TOKENS || "4096",
+      10,
+    );
+
+    const stream = await openai.responses.create({
+      model: process.env.OPENAI_MODEL || "",
+      input,
+      max_output_tokens: maxOutputTokens,
+      stream: true,
+    });
+
+    const encoder = new TextEncoder();
+    let buffer = "";
+
+    const readable = new ReadableStream({
+      async start(controller) {
+        const send = (data: Record<string, unknown>) => {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify(data)}\n\n`),
+          );
+        };
+
+        try {
+          for await (const event of stream) {
+            if (event.type === "response.output_text.delta") {
+              buffer += event.delta;
+              send({ type: "delta", text: event.delta });
+            } else if (event.type === "response.completed") {
+              const usage = event.response?.usage;
+              if (usage) {
+                console.log(
+                  `Token usage — input: ${usage.input_tokens}, output: ${usage.output_tokens}, total: ${usage.total_tokens}`,
+                );
+              }
+              send({ type: "complete" });
+            } else if (event.type === "error") {
+              const message =
+                (event as any).error?.message || "Unknown OpenAI error";
+              console.error("OpenAI stream error:", message);
+              send({ type: "error", message });
+            }
+          }
+        } catch (err: any) {
+          console.error("Stream processing error:", err.message);
+          send({ type: "error", message: err.message });
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(readable, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (err: any) {
+    console.error("getSummaryStream error:", err.message);
+    return new Response(err.message || "Internal server error", {
+      status: 500,
+    });
+  }
+}

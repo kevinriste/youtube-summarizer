@@ -11,10 +11,12 @@ import DialogActions from "@mui/material/DialogActions";
 import DialogContent from "@mui/material/DialogContent";
 import DialogContentText from "@mui/material/DialogContentText";
 import DialogTitle from "@mui/material/DialogTitle";
-import { Stack } from "@mui/material";
+import { CircularProgress, Stack } from "@mui/material";
 import Markdown from "react-markdown";
 
 const Home = () => {
+  const abortControllerRef = React.useRef<AbortController | null>(null);
+
   const getYoutubeTranscript = async (
     event: React.MouseEvent<HTMLButtonElement>,
     alsoGetSummary: boolean = false,
@@ -53,71 +55,93 @@ const Home = () => {
     ensurePasswordExistsForGetSummary(undefined, textboxContent);
   };
 
-  // Allow option to directly pass in transcript text in case state updates are slow
-  // to ensure it's present before we request the summary
+  const cancelSummary = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsStreaming(false);
+    setSummaryAlert({ message: "Summary cancelled.", level: "warning" });
+  };
+
   const getTranscriptSummary = async (
     directlyPassedTranscriptText?: string,
   ) => {
-    let dataToSubmit = {};
-    if (!pendingRequestData) {
-      setSummaryText("Fetching summary...");
-      setSummaryAlert({ message: "", level: "info" });
-      setIsSummaryError(false);
-      const passwordToSubmitToApi = localStorage.getItem("apiPassword");
-      dataToSubmit = {
-        transcript: directlyPassedTranscriptText ?? transcriptText,
-        userPrompt: promptText,
-        passwordToSubmitToApi,
-      };
-    } else {
-      dataToSubmit = pendingRequestData;
-    }
-    const response = await fetch("/api/getSummary", {
-      method: "POST",
-      body: JSON.stringify(dataToSubmit),
-    });
-    if (response.ok) {
-      const responseJson = await response.json();
-      const keysExpectedIfResponseIsPending = [
-        "threadId",
-        "runId",
-        "assistantId",
-        "fileId",
-        "status",
-      ];
-      if (
-        keysExpectedIfResponseIsPending.every((key) =>
-          responseJson.hasOwnProperty(key),
-        )
-      ) {
-        setPendingRequestData(responseJson);
-        setSummaryAlert({
-          message: `Processing using OpenAI Assistant due to long text; request is pending and updates will appear here. Current status: ${responseJson.status}`,
-          level: "info",
-        });
-      } else {
-        setPendingRequestData(undefined);
-        setSummaryText(responseJson.summary);
+    setSummaryText("");
+    setSummaryAlert({ message: "", level: "info" });
+    setIsSummaryError(false);
+    setIsStreaming(true);
+    setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 50);
+
+    const passwordToSubmitToApi = localStorage.getItem("apiPassword");
+    const dataToSubmit = {
+      transcript: directlyPassedTranscriptText ?? transcriptText,
+      userPrompt: promptText,
+      passwordToSubmitToApi,
+    };
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    try {
+      const response = await fetch("/api/getSummaryStream", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(dataToSubmit),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(errorText);
+        setIsSummaryError(true);
+        setSummaryText(errorText);
+        setIsStreaming(false);
+        return;
       }
-      if ((responseJson?.message || "") !== "")
-        setSummaryAlert({ message: responseJson.message, level: "info" });
-    } else {
-      const responseError = await response.text();
-      console.error(responseError);
-      setIsSummaryError(true);
-      setSummaryText(responseError.toString());
+
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let accumulated = "";
+      let lineBuf = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        lineBuf += decoder.decode(value, { stream: true });
+        const lines = lineBuf.split("\n");
+        // Keep the last potentially incomplete line in the buffer
+        lineBuf = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === "delta") {
+            accumulated += data.text;
+            setSummaryText(accumulated);
+          } else if (data.type === "complete") {
+            // Stream finished successfully
+          } else if (data.type === "error") {
+            setIsSummaryError(true);
+            setSummaryText(data.message);
+          }
+        }
+      }
+    } catch (err: any) {
+      if (err.name === "AbortError") {
+        // User cancelled — already handled in cancelSummary
+      } else {
+        console.error(err);
+        setIsSummaryError(true);
+        setSummaryText(err.message || "Failed to fetch summary");
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
     }
   };
-
-  React.useEffect(() => {
-    let interval;
-    if (pendingRequestData) {
-      interval = setInterval(() => getTranscriptSummary(), 2000); // Poll every x milliseconds
-    } else {
-      clearInterval(interval);
-    }
-    return () => clearInterval(interval);
-  });
 
   const defaultYoutubeSummaryPrompt =
     "Please provide a bulleted list of the main points from the above YouTube transcript.";
@@ -129,7 +153,7 @@ const Home = () => {
 
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState("");
-  const [pendingRequestData, setPendingRequestData] = React.useState();
+  const [isStreaming, setIsStreaming] = React.useState(false);
 
   const [urlText, setUrlText] = React.useState("");
   const [promptText, setPromptText] = React.useState(
@@ -145,6 +169,7 @@ const Home = () => {
   }>({ message: "", level: "info" });
 
   const [passwordDialogIsOpen, setPasswordDialogIsOpen] = React.useState(false);
+  const [transcriptExpanded, setTranscriptExpanded] = React.useState(false);
 
   const markdownRef = React.useRef<HTMLDivElement>(null);
 
@@ -286,6 +311,7 @@ const Home = () => {
                   variant="contained"
                   sx={{ mt: 3, maxWidth: "20rem" }}
                   onClick={getYoutubeTranscript}
+                  disabled={isStreaming}
                 >
                   Get transcript
                 </Button>
@@ -293,6 +319,7 @@ const Home = () => {
                   variant="contained"
                   sx={{ mt: 3, maxWidth: "20rem" }}
                   onClick={(e) => getYoutubeTranscript(e, true)}
+                  disabled={isStreaming}
                 >
                   Get Transcript and Summary
                 </Button>
@@ -319,6 +346,7 @@ const Home = () => {
                   variant="contained"
                   sx={{ mt: 3, maxWidth: "20rem" }}
                   onClick={getSummaryFromTextboxContent}
+                  disabled={isStreaming}
                 >
                   Get Summary
                 </Button>
@@ -346,10 +374,21 @@ const Home = () => {
                   variant="contained"
                   sx={{ mb: 2, maxWidth: "20rem" }}
                   onClick={ensurePasswordExistsForGetSummary}
+                  disabled={isStreaming}
                 >
                   Get Summary
                 </Button>
               )}
+            {isStreaming && (
+              <Button
+                variant="outlined"
+                color="error"
+                sx={{ mb: 2, maxWidth: "20rem" }}
+                onClick={cancelSummary}
+              >
+                Cancel Summary
+              </Button>
+            )}
           </Stack>
         </Box>
         <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
@@ -391,20 +430,30 @@ const Home = () => {
               transcriptText !== "Fetching transcript...") ||
               useTextboxContent) && (
               <>
-                {!isSummaryError && summaryText !== "" && (
+                {summaryAlert.message !== "" && (
+                  <Alert severity={summaryAlert.level} sx={{ mb: 2 }}>
+                    {summaryAlert.message}
+                  </Alert>
+                )}
+                {!isSummaryError && (isStreaming || summaryText !== "") && (
                   <>
-                    {summaryAlert.message !== "" && (
-                      <Alert severity={summaryAlert.level} sx={{ mb: 2 }}>
-                        {summaryAlert.message}
-                      </Alert>
+                    {isStreaming && summaryText === "" && (
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, my: 2 }}>
+                        <CircularProgress size={20} />
+                        <Typography color="text.secondary">
+                          Generating summary...
+                        </Typography>
+                      </Box>
                     )}
-                    <Button
-                      onClick={() => copyToClipboard()}
-                      variant="outlined"
-                      sx={{ mb: 2 }}
-                    >
-                      Copy summary to clipboard
-                    </Button>
+                    {!isStreaming && summaryText !== "" && (
+                      <Button
+                        onClick={() => copyToClipboard()}
+                        variant="outlined"
+                        sx={{ mb: 2 }}
+                      >
+                        Copy summary to clipboard
+                      </Button>
+                    )}
                     <div ref={markdownRef}>
                       <Markdown>{summaryText}</Markdown>
                     </div>
@@ -418,16 +467,39 @@ const Home = () => {
               </>
             )}
             {!isTranscriptError && transcriptText !== "" && (
-              <>
+              <Box sx={{ width: "100%", mt: 2 }}>
                 <Button
-                  onClick={() => navigator.clipboard.writeText(transcriptText)}
-                  variant="outlined"
-                  sx={{ mb: 2 }}
+                  variant="text"
+                  onClick={() => setTranscriptExpanded(!transcriptExpanded)}
+                  sx={{ textTransform: "none", gap: 1 }}
                 >
-                  Copy transcript to clipboard
+                  <Typography fontWeight="medium">
+                    {transcriptExpanded ? "▲ Hide" : "▼ Show"} Transcript
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    ({transcriptText.length.toLocaleString()} chars)
+                  </Typography>
                 </Button>
-                <Typography>{transcriptText}</Typography>
-              </>
+                {transcriptExpanded && (
+                  <Box sx={{ mt: 1, pl: 1 }}>
+                    <Button
+                      onClick={() =>
+                        navigator.clipboard.writeText(transcriptText)
+                      }
+                      variant="outlined"
+                      size="small"
+                      sx={{ mb: 2 }}
+                    >
+                      Copy transcript to clipboard
+                    </Button>
+                    <Typography
+                      sx={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                    >
+                      {transcriptText}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             )}
             {isTranscriptError && (
               <Alert severity="error">{transcriptText}</Alert>

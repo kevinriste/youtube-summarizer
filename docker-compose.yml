@@ -5,11 +5,16 @@ services:
       VIRTUAL_HOST: "ytt.klt.pw"
       VIRTUAL_PORT: 3000
       LETSENCRYPT_HOST: "ytt.klt.pw"
+      PROXY_READ_TIMEOUT: 300
     env_file:
       - .env.local
     build: .
+    networks:
+      - default
+      - nginx-proxy
 
 networks:
   default:
+  nginx-proxy:
     name: nginx-proxy-certbot-docker_default
     external: true
