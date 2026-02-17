@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ResponseInput } from "openai/resources/responses/responses";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -11,7 +12,7 @@ export async function POST(request: Request) {
       return new Response("Incorrect API password", { status: 401 });
     }
 
-    let input: Array<{ role: string; content: string }>;
+    let input: ResponseInput;
 
     if (messages && Array.isArray(messages)) {
       // Follow-up conversation with full history
