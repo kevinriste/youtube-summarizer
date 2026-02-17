@@ -164,8 +164,28 @@ const Home = () => {
     }
   };
 
+  const cancelFollowUp = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    // Mark the last user message as cancelled, and save any partial response
+    setFollowUpMessages((prev) => {
+      const updated = [...prev];
+      if (updated.length > 0 && updated[updated.length - 1].role === "user") {
+        updated[updated.length - 1] = { ...updated[updated.length - 1], cancelled: true };
+      }
+      if (streamingText) {
+        updated.push({ role: "assistant", content: streamingText, cancelled: true });
+      }
+      return updated;
+    });
+    setStreamingText("");
+    setIsStreaming(false);
+  };
+
   const sendFollowUp = async () => {
-    if (!followUpText.trim() || conversationHistory.length === 0) return;
+    if (!followUpText.trim() || conversationHistory.length === 0 || isStreaming) return;
 
     const question = followUpText.trim();
     setFollowUpText("");
@@ -234,7 +254,7 @@ const Home = () => {
     Array<{ role: string; content: string }>
   >([]);
   const [followUpMessages, setFollowUpMessages] = React.useState<
-    Array<{ role: string; content: string }>
+    Array<{ role: string; content: string; cancelled?: boolean }>
   >([]);
   const [followUpText, setFollowUpText] = React.useState("");
   const [streamingText, setStreamingText] = React.useState("");
@@ -619,6 +639,8 @@ const Home = () => {
                                 mb: 2,
                                 p: 1.5,
                                 borderRadius: 1,
+                                opacity: msg.cancelled ? 0.45 : 1,
+                                fontStyle: msg.cancelled ? "italic" : "normal",
                                 bgcolor:
                                   msg.role === "user"
                                     ? "action.hover"
@@ -634,9 +656,10 @@ const Home = () => {
                                 sx={{ mb: 0.5, display: "block" }}
                               >
                                 {msg.role === "user" ? "You" : msg.role === "error" ? "Error" : "AI"}
+                                {msg.cancelled && " (cancelled)"}
                               </Typography>
                               {msg.role === "user" ? (
-                                <Typography>{msg.content}</Typography>
+                                <Typography sx={{ fontStyle: "inherit" }}>{msg.content}</Typography>
                               ) : (
                                 <Markdown>{msg.content}</Markdown>
                               )}
@@ -666,33 +689,42 @@ const Home = () => {
                           <div ref={chatEndRef} />
                         </Box>
                       )}
-                      {!isStreaming && (
-                        <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
-                          <TextField
-                            fullWidth
-                            size="small"
-                            label="Ask a follow-up question..."
-                            value={followUpText}
-                            onChange={(e) => setFollowUpText(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" && !e.shiftKey) {
-                                e.preventDefault();
-                                sendFollowUp();
-                              }
-                            }}
-                            multiline
-                            maxRows={3}
-                          />
+                      <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                        <TextField
+                          autoFocus
+                          fullWidth
+                          size="small"
+                          label="Ask a follow-up question..."
+                          value={followUpText}
+                          onChange={(e) => setFollowUpText(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" && !e.shiftKey) {
+                              e.preventDefault();
+                              sendFollowUp();
+                            }
+                          }}
+                          multiline
+                          maxRows={3}
+                        />
+                        {isStreaming && (
                           <Button
-                            variant="contained"
-                            onClick={sendFollowUp}
-                            disabled={!followUpText.trim()}
+                            variant="outlined"
+                            color="error"
+                            onClick={cancelFollowUp}
                             sx={{ minWidth: "5rem", height: 40 }}
                           >
-                            Ask
+                            Stop
                           </Button>
-                        </Box>
-                      )}
+                        )}
+                        <Button
+                          variant="contained"
+                          onClick={sendFollowUp}
+                          disabled={!followUpText.trim() || isStreaming}
+                          sx={{ minWidth: "5rem", height: 40 }}
+                        >
+                          Ask
+                        </Button>
+                      </Box>
                     </Box>
                   )}
               </>
