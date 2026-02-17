@@ -64,78 +64,150 @@ const Home = () => {
     setSummaryAlert({ message: "Summary cancelled.", level: "warning" });
   };
 
+  // Shared SSE streaming helper — returns the accumulated text or null on error/abort
+  const streamResponse = async (
+    body: Record<string, unknown>,
+    onDelta: (accumulated: string) => void,
+  ): Promise<string | null> => {
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
+    const response = await fetch("/api/getSummaryStream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(errorText);
+    }
+
+    const reader = response.body!.getReader();
+    const decoder = new TextDecoder();
+    let accumulated = "";
+    let lineBuf = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      lineBuf += decoder.decode(value, { stream: true });
+      const lines = lineBuf.split("\n");
+      lineBuf = lines.pop() || "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = JSON.parse(line.slice(6));
+
+        if (data.type === "delta") {
+          accumulated += data.text;
+          onDelta(accumulated);
+        } else if (data.type === "error") {
+          throw new Error(data.message);
+        }
+      }
+    }
+
+    return accumulated;
+  };
+
   const getTranscriptSummary = async (
     directlyPassedTranscriptText?: string,
   ) => {
     setSummaryText("");
+    setFollowUpText("");
+    setFollowUpMessages([]);
+    setStreamingText("");
     setSummaryAlert({ message: "", level: "info" });
     setIsSummaryError(false);
     setIsStreaming(true);
+    setConversationHistory([]);
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 50);
 
     const passwordToSubmitToApi = localStorage.getItem("apiPassword");
-    const dataToSubmit = {
-      transcript: directlyPassedTranscriptText ?? transcriptText,
-      userPrompt: promptText,
-      passwordToSubmitToApi,
-    };
-
-    const controller = new AbortController();
-    abortControllerRef.current = controller;
+    const transcript = directlyPassedTranscriptText ?? transcriptText;
+    const userPrompt = promptText;
 
     try {
-      const response = await fetch("/api/getSummaryStream", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dataToSubmit),
-        signal: controller.signal,
-      });
+      const result = await streamResponse(
+        { transcript, userPrompt, passwordToSubmitToApi },
+        (acc) => setSummaryText(acc),
+      );
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error(errorText);
-        setIsSummaryError(true);
-        setSummaryText(errorText);
-        setIsStreaming(false);
-        return;
-      }
-
-      const reader = response.body!.getReader();
-      const decoder = new TextDecoder();
-      let accumulated = "";
-      let lineBuf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        lineBuf += decoder.decode(value, { stream: true });
-        const lines = lineBuf.split("\n");
-        // Keep the last potentially incomplete line in the buffer
-        lineBuf = lines.pop() || "";
-
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = JSON.parse(line.slice(6));
-
-          if (data.type === "delta") {
-            accumulated += data.text;
-            setSummaryText(accumulated);
-          } else if (data.type === "complete") {
-            // Stream finished successfully
-          } else if (data.type === "error") {
-            setIsSummaryError(true);
-            setSummaryText(data.message);
-          }
-        }
+      if (result) {
+        // Only include the transcript as context for follow-ups, not the
+        // summary instruction, so the model doesn't keep producing bullet lists.
+        const context =
+          "### START TRANSCRIPT ### " +
+          transcript +
+          " ### END TRANSCRIPT ###";
+        setConversationHistory([
+          { role: "user", content: context },
+          { role: "assistant", content: result },
+        ]);
       }
     } catch (err: any) {
-      if (err.name === "AbortError") {
-        // User cancelled — already handled in cancelSummary
-      } else {
+      if (err.name !== "AbortError") {
         console.error(err);
         setIsSummaryError(true);
         setSummaryText(err.message || "Failed to fetch summary");
+      }
+    } finally {
+      setIsStreaming(false);
+      abortControllerRef.current = null;
+    }
+  };
+
+  const sendFollowUp = async () => {
+    if (!followUpText.trim() || conversationHistory.length === 0) return;
+
+    const question = followUpText.trim();
+    setFollowUpText("");
+    setStreamingText("");
+    setIsSummaryError(false);
+    setIsStreaming(true);
+    setSummaryAlert({ message: "", level: "info" });
+
+    // Immediately show the user's message
+    setFollowUpMessages((prev) => [...prev, { role: "user", content: question }]);
+    setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+
+    const newHistory = [
+      ...conversationHistory,
+      { role: "user", content: question },
+    ];
+
+    const passwordToSubmitToApi = localStorage.getItem("apiPassword");
+
+    try {
+      const result = await streamResponse(
+        { messages: newHistory, passwordToSubmitToApi },
+        (acc) => {
+          setStreamingText(acc);
+          chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        },
+      );
+
+      if (result) {
+        setFollowUpMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: result },
+        ]);
+        setStreamingText("");
+        setConversationHistory([
+          ...newHistory,
+          { role: "assistant", content: result },
+        ]);
+      }
+    } catch (err: any) {
+      if (err.name !== "AbortError") {
+        console.error(err);
+        setFollowUpMessages((prev) => [
+          ...prev,
+          { role: "error", content: err.message || "Failed to fetch response" },
+        ]);
       }
     } finally {
       setIsStreaming(false);
@@ -154,6 +226,14 @@ const Home = () => {
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState("");
   const [isStreaming, setIsStreaming] = React.useState(false);
+  const [conversationHistory, setConversationHistory] = React.useState<
+    Array<{ role: string; content: string }>
+  >([]);
+  const [followUpMessages, setFollowUpMessages] = React.useState<
+    Array<{ role: string; content: string }>
+  >([]);
+  const [followUpText, setFollowUpText] = React.useState("");
+  const [streamingText, setStreamingText] = React.useState("");
 
   const [urlText, setUrlText] = React.useState("");
   const [promptText, setPromptText] = React.useState(
@@ -172,6 +252,37 @@ const Home = () => {
   const [transcriptExpanded, setTranscriptExpanded] = React.useState(false);
 
   const markdownRef = React.useRef<HTMLDivElement>(null);
+  const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+  const downloadConversation = () => {
+    let md = "# YouTube Summary Conversation\n\n";
+    if (urlText) {
+      md += `**Source:** ${urlText}\n\n`;
+    }
+    md += "## Summary\n\n" + summaryText + "\n";
+    if (followUpMessages.length > 0) {
+      md += "\n## Conversation\n";
+      for (let i = 0; i < followUpMessages.length; i++) {
+        const msg = followUpMessages[i];
+        if (msg.role === "user") {
+          md += (i === 0 ? "\n" : "\n---\n\n") + "**You:** " + msg.content + "\n";
+        } else if (msg.role === "assistant") {
+          md += "\n**AI:** " + msg.content + "\n";
+        }
+      }
+    }
+    const blob = new Blob([md], { type: "text/markdown" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+    const time = `${pad(now.getHours())}-${pad(now.getMinutes())}-${pad(now.getSeconds())}`;
+    a.download = `youtube-summary-conversation-${date}--${time}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const copyToClipboard = async () => {
     if (navigator.clipboard && navigator.clipboard.write) {
@@ -446,13 +557,20 @@ const Home = () => {
                       </Box>
                     )}
                     {!isStreaming && summaryText !== "" && (
-                      <Button
-                        onClick={() => copyToClipboard()}
-                        variant="outlined"
-                        sx={{ mb: 2 }}
-                      >
-                        Copy summary to clipboard
-                      </Button>
+                      <Box sx={{ display: "flex", gap: 1, mb: 2 }}>
+                        <Button
+                          onClick={() => copyToClipboard()}
+                          variant="outlined"
+                        >
+                          Copy summary to clipboard
+                        </Button>
+                        <Button
+                          onClick={downloadConversation}
+                          variant="outlined"
+                        >
+                          Download conversation
+                        </Button>
+                      </Box>
                     )}
                     <div ref={markdownRef}>
                       <Markdown>{summaryText}</Markdown>
@@ -464,9 +582,108 @@ const Home = () => {
                     {summaryText}
                   </Alert>
                 )}
+                {!isSummaryError &&
+                  conversationHistory.length > 0 &&
+                  (followUpMessages.length > 0 || !isStreaming) && (
+                    <Box sx={{ width: "100%", mt: 3 }}>
+                      {followUpMessages.length > 0 && (
+                        <Box
+                          sx={{
+                            maxHeight: "60vh",
+                            overflowY: "auto",
+                            mb: 2,
+                            border: 1,
+                            borderColor: "divider",
+                            borderRadius: 1,
+                            p: 2,
+                          }}
+                        >
+                          {followUpMessages.map((msg, i) => (
+                            <Box
+                              key={i}
+                              sx={{
+                                mb: 2,
+                                p: 1.5,
+                                borderRadius: 1,
+                                bgcolor:
+                                  msg.role === "user"
+                                    ? "action.hover"
+                                    : msg.role === "error"
+                                      ? "error.light"
+                                      : "transparent",
+                              }}
+                            >
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                fontWeight="bold"
+                                sx={{ mb: 0.5, display: "block" }}
+                              >
+                                {msg.role === "user" ? "You" : msg.role === "error" ? "Error" : "AI"}
+                              </Typography>
+                              {msg.role === "user" ? (
+                                <Typography>{msg.content}</Typography>
+                              ) : (
+                                <Markdown>{msg.content}</Markdown>
+                              )}
+                            </Box>
+                          ))}
+                          {isStreaming && streamingText === "" && (
+                            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, p: 1.5 }}>
+                              <CircularProgress size={16} />
+                              <Typography variant="body2" color="text.secondary">
+                                Waiting for response...
+                              </Typography>
+                            </Box>
+                          )}
+                          {isStreaming && streamingText !== "" && (
+                            <Box sx={{ p: 1.5 }}>
+                              <Typography
+                                variant="caption"
+                                color="text.secondary"
+                                fontWeight="bold"
+                                sx={{ mb: 0.5, display: "block" }}
+                              >
+                                AI
+                              </Typography>
+                              <Markdown>{streamingText}</Markdown>
+                            </Box>
+                          )}
+                          <div ref={chatEndRef} />
+                        </Box>
+                      )}
+                      {!isStreaming && (
+                        <Box sx={{ display: "flex", gap: 1, alignItems: "flex-start" }}>
+                          <TextField
+                            fullWidth
+                            size="small"
+                            label="Ask a follow-up question..."
+                            value={followUpText}
+                            onChange={(e) => setFollowUpText(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" && !e.shiftKey) {
+                                e.preventDefault();
+                                sendFollowUp();
+                              }
+                            }}
+                            multiline
+                            maxRows={3}
+                          />
+                          <Button
+                            variant="contained"
+                            onClick={sendFollowUp}
+                            disabled={!followUpText.trim()}
+                            sx={{ minWidth: "5rem", height: 40 }}
+                          >
+                            Ask
+                          </Button>
+                        </Box>
+                      )}
+                    </Box>
+                  )}
               </>
             )}
-            {!isTranscriptError && transcriptText !== "" && (
+            {!isTranscriptError && transcriptText !== "" && transcriptText !== "Fetching transcript..." && (
               <Box sx={{ width: "100%", mt: 2 }}>
                 <Button
                   variant="text"
