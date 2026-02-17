@@ -240,7 +240,7 @@ const Home = () => {
   };
 
   const defaultYoutubeSummaryPrompt =
-    "Please provide a bulleted list of the main points from the above YouTube transcript.";
+    "Please provide a fairly short list of the main points from the above YouTube transcript.";
   const defaultTextSummaryPrompt =
     "Please provide a bulleted list of the main points from the above text.";
 
