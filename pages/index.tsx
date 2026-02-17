@@ -364,7 +364,7 @@ const Home = () => {
   };
 
   return (
-    <Container maxWidth="lg">
+    <Container maxWidth="md">
       <Head>
         <title>AI Summarizer</title>
       </Head>
@@ -535,6 +535,7 @@ const Home = () => {
               display: "flex",
               flexDirection: "column",
               alignItems: "center",
+              width: "100%",
             }}
           >
             {((!isTranscriptError &&
@@ -684,14 +685,14 @@ const Home = () => {
               </>
             )}
             {!isTranscriptError && transcriptText !== "" && transcriptText !== "Fetching transcript..." && (
-              <Box sx={{ width: "100%", mt: 2 }}>
+              <Box sx={{ width: "100%", mt: 2, alignSelf: "flex-start" }}>
                 <Button
                   variant="text"
                   onClick={() => setTranscriptExpanded(!transcriptExpanded)}
                   sx={{ textTransform: "none", gap: 1 }}
                 >
                   <Typography fontWeight="medium">
-                    {transcriptExpanded ? "▲ Hide" : "▼ Show"} Transcript
+                    {transcriptExpanded ? "▼ Hide" : "▶ Show"} Transcript
                   </Typography>
                   <Typography variant="body2" color="text.secondary">
                     ({transcriptText.length.toLocaleString()} chars)
