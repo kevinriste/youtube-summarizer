@@ -36,8 +36,12 @@ const Home = () => {
     if (response.ok) {
       const responseJson = await response.json();
       setTranscriptText(responseJson);
-      if (alsoGetSummary)
+      if (alsoGetSummary) {
         ensurePasswordExistsForGetSummary(undefined, responseJson);
+      } else {
+        setTranscriptExpanded(true);
+        setScrollToTranscript(true);
+      }
     } else {
       const responseError = await response.text();
       console.error(responseError);
@@ -253,6 +257,15 @@ const Home = () => {
 
   const markdownRef = React.useRef<HTMLDivElement>(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
+  const transcriptContentRef = React.useRef<HTMLDivElement>(null);
+  const [scrollToTranscript, setScrollToTranscript] = React.useState(false);
+
+  React.useEffect(() => {
+    if (scrollToTranscript && transcriptContentRef.current) {
+      transcriptContentRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+      setScrollToTranscript(false);
+    }
+  }, [scrollToTranscript, transcriptExpanded]);
 
   const downloadConversation = () => {
     let md = "# YouTube Summary Conversation\n\n";
@@ -688,7 +701,11 @@ const Home = () => {
               <Box sx={{ width: "100%", mt: 2, alignSelf: "flex-start" }}>
                 <Button
                   variant="text"
-                  onClick={() => setTranscriptExpanded(!transcriptExpanded)}
+                  onClick={() => {
+                    const willExpand = !transcriptExpanded;
+                    setTranscriptExpanded(willExpand);
+                    if (willExpand) setScrollToTranscript(true);
+                  }}
                   sx={{ textTransform: "none", gap: 1 }}
                 >
                   <Typography fontWeight="medium">
@@ -699,7 +716,7 @@ const Home = () => {
                   </Typography>
                 </Button>
                 {transcriptExpanded && (
-                  <Box sx={{ mt: 1, pl: 1 }}>
+                  <Box ref={transcriptContentRef} sx={{ mt: 1, pl: 1 }}>
                     <Button
                       onClick={() =>
                         navigator.clipboard.writeText(transcriptText)
