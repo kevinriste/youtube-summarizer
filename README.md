@@ -1,6 +1,6 @@
-# AI Summarizer (YouTube + Text)
+# AI Summarizer (YouTube)
 
-This project provides a simple web interface for turning long YouTube videos or text blocks into concise, structured summaries.  
+This project provides a simple web interface for turning long YouTube videos into concise, structured summaries.  
 It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Docker support for deployment.
 
 ---
@@ -9,9 +9,6 @@ It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Doc
 
 - **YouTube transcript extraction**  
   Paste a YouTube URL (or video ID) and the app fetches and cleans the transcript automatically using `youtube-transcript-plus`.
-
-- **Text input mode**  
-  Switch from YouTube mode to paste raw text for summarization.
 
 - **Customizable summary prompts**  
   Adjust the instructions sent to the model (e.g., bullet points, key themes, narrative summary).

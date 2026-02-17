@@ -22,12 +22,14 @@ const Home = () => {
     alsoGetSummary: boolean = false,
   ) => {
     event.preventDefault();
+    const requestedUrl = urlText.trim();
     setTranscriptText("Fetching transcript...");
     setSummaryText("");
     setisTranscriptError(false);
     setIsSummaryError(false);
+    setHasSummaryForCurrentTranscript(false);
     const dataToSubmit = {
-      yturl: urlText,
+      yturl: requestedUrl,
     };
     const response = await fetch("/api/getTranscript", {
       method: "POST",
@@ -36,6 +38,7 @@ const Home = () => {
     if (response.ok) {
       const responseJson = await response.json();
       setTranscriptText(responseJson);
+      setSuccessfulTranscriptUrl(requestedUrl);
       if (alsoGetSummary) {
         ensurePasswordExistsForGetSummary(undefined, responseJson);
       } else {
@@ -47,16 +50,8 @@ const Home = () => {
       console.error(responseError);
       setisTranscriptError(true);
       setTranscriptText(responseError.toString());
+      setSuccessfulTranscriptUrl(null);
     }
-  };
-
-  const getSummaryFromTextboxContent = async (
-    event: React.MouseEvent<HTMLButtonElement>,
-  ) => {
-    event.preventDefault();
-    setSummaryText("");
-    setIsSummaryError(false);
-    ensurePasswordExistsForGetSummary(undefined, textboxContent);
   };
 
   const cancelSummary = () => {
@@ -141,6 +136,7 @@ const Home = () => {
       );
 
       if (result) {
+        setHasSummaryForCurrentTranscript(true);
         // Only include the transcript as context for follow-ups, not the
         // summary instruction, so the model doesn't keep producing bullet lists.
         const context =
@@ -241,8 +237,6 @@ const Home = () => {
 
   const defaultYoutubeSummaryPrompt =
     "Please provide a fairly short list of the main points from the above YouTube transcript.";
-  const defaultTextSummaryPrompt =
-    "Please provide a bulleted list of the main points from the above text.";
 
   const [isTranscriptError, setisTranscriptError] = React.useState(false);
   const [transcriptText, setTranscriptText] = React.useState("");
@@ -263,9 +257,8 @@ const Home = () => {
   const [promptText, setPromptText] = React.useState(
     defaultYoutubeSummaryPrompt,
   );
-
-  const [textboxContent, setTextboxContent] = React.useState("");
-  const [useTextboxContent, setUseTextboxContent] = React.useState(false);
+  const [successfulTranscriptUrl, setSuccessfulTranscriptUrl] = React.useState<string | null>(null);
+  const [hasSummaryForCurrentTranscript, setHasSummaryForCurrentTranscript] = React.useState(false);
 
   const [summaryAlert, setSummaryAlert] = React.useState<{
     message: string;
@@ -358,10 +351,6 @@ const Home = () => {
     setPromptText(event.target.value);
   };
 
-  const handleTextboxContentChange = (event) => {
-    setTextboxContent(event.target.value);
-  };
-
   const ensurePasswordExistsForGetSummary = (
     event?: React.MouseEvent<HTMLButtonElement>,
     directlyPassedTranscriptText?: string,
@@ -399,6 +388,18 @@ const Home = () => {
     getTranscriptSummary(directlyPassedTranscriptText);
   };
 
+  const hasSuccessfulTranscript =
+    transcriptText !== "" &&
+    !isTranscriptError &&
+    transcriptText !== "Fetching transcript...";
+  const hasTranscriptForCurrentUrl =
+    hasSuccessfulTranscript &&
+    successfulTranscriptUrl !== null &&
+    successfulTranscriptUrl === urlText.trim();
+  const summaryButtonLabel = hasSummaryForCurrentTranscript
+    ? "Get Summary Again"
+    : "Get Summary";
+
   return (
     <Container maxWidth="md">
       <Head>
@@ -418,33 +419,14 @@ const Home = () => {
         </Typography>
         <Box sx={{ mt: 1, width: "100%" }}>
           <Stack spacing={2} alignItems="center">
-            {!useTextboxContent && (
-              <>
-                <TextField
-                  margin="normal"
-                  fullWidth
-                  label="YouTube URL"
-                  autoFocus
-                  value={urlText}
-                  onChange={handleUrlChange}
-                />
-              </>
-            )}
-            {useTextboxContent && (
-              <>
-                <TextField
-                  margin="normal"
-                  fullWidth
-                  label="Text input"
-                  autoFocus
-                  multiline
-                  minRows={4}
-                  maxRows={10}
-                  value={textboxContent}
-                  onChange={handleTextboxContentChange}
-                />
-              </>
-            )}
+            <TextField
+              margin="normal"
+              fullWidth
+              label="YouTube URL"
+              autoFocus
+              value={urlText}
+              onChange={handleUrlChange}
+            />
             <TextField
               margin="normal"
               fullWidth
@@ -452,90 +434,57 @@ const Home = () => {
               value={promptText}
               onChange={handlePromptChange}
             />
-            {!useTextboxContent && (
-              <>
+            <Box
+              sx={{
+                display: "flex",
+                flexWrap: "wrap",
+                justifyContent: "center",
+                gap: 1.5,
+                width: "100%",
+                mt: 1,
+              }}
+            >
+              {!hasTranscriptForCurrentUrl && (
                 <Button
                   variant="contained"
-                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  sx={{ minWidth: "12rem", maxWidth: "20rem" }}
                   onClick={getYoutubeTranscript}
                   disabled={isStreaming}
                 >
                   Get transcript
                 </Button>
+              )}
+              {!hasTranscriptForCurrentUrl && (
                 <Button
                   variant="contained"
-                  sx={{ mt: 3, maxWidth: "20rem" }}
+                  sx={{ minWidth: "12rem", maxWidth: "20rem" }}
                   onClick={(e) => getYoutubeTranscript(e, true)}
                   disabled={isStreaming}
                 >
                   Get Transcript and Summary
                 </Button>
+              )}
+              {hasSuccessfulTranscript && (
                 <Button
                   variant="contained"
-                  color="secondary"
-                  sx={{ mt: 3, maxWidth: "20rem" }}
-                  onClick={() => {
-                    setUseTextboxContent(true);
-                    setPromptText(defaultTextSummaryPrompt);
-                    setTranscriptText("");
-                    setSummaryText("");
-                    setUrlText("");
-                    setTextboxContent("");
-                  }}
-                >
-                  Switch to using textbox input as text content
-                </Button>
-              </>
-            )}
-            {useTextboxContent && (
-              <>
-                <Button
-                  variant="contained"
-                  sx={{ mt: 3, maxWidth: "20rem" }}
-                  onClick={getSummaryFromTextboxContent}
-                  disabled={isStreaming}
-                >
-                  Get Summary
-                </Button>
-                <Button
-                  variant="contained"
-                  color="secondary"
-                  sx={{ mt: 3, maxWidth: "20rem" }}
-                  onClick={() => {
-                    setUseTextboxContent(false);
-                    setPromptText(defaultYoutubeSummaryPrompt);
-                    setTextboxContent("");
-                    setSummaryText("");
-                    setTranscriptText("");
-                    setUrlText("");
-                  }}
-                >
-                  Switch to using YouTube summary as text content
-                </Button>
-              </>
-            )}
-            {transcriptText !== "" &&
-              !isTranscriptError &&
-              transcriptText !== "Fetching transcript..." && (
-                <Button
-                  variant="contained"
-                  sx={{ mb: 2, maxWidth: "20rem" }}
+                  sx={{ minWidth: "12rem", maxWidth: "20rem" }}
                   onClick={ensurePasswordExistsForGetSummary}
                   disabled={isStreaming}
                 >
-                  Get Summary
+                  {summaryButtonLabel}
                 </Button>
               )}
-            {isStreaming && (
-              <Button
-                variant="outlined"
-                color="error"
-                sx={{ mb: 2, maxWidth: "20rem" }}
-                onClick={cancelSummary}
-              >
-                Cancel Summary
-              </Button>
-            )}
+              {isStreaming && (
+                <Button
+                  variant="outlined"
+                  color="error"
+                  sx={{ minWidth: "12rem", maxWidth: "20rem" }}
+                  onClick={cancelSummary}
+                >
+                  Cancel Summary
+                </Button>
+              )}
+            </Box>
           </Stack>
         </Box>
         <Dialog open={passwordDialogIsOpen} onClose={handlePasswordDialogClose}>
@@ -563,7 +512,7 @@ const Home = () => {
             </DialogActions>
           </form>
         </Dialog>
-        {(transcriptText !== "" || useTextboxContent) && (
+        {transcriptText !== "" && (
           <Box
             sx={{
               marginTop: 4,
@@ -574,9 +523,8 @@ const Home = () => {
               width: "100%",
             }}
           >
-            {((!isTranscriptError &&
-              transcriptText !== "Fetching transcript...") ||
-              useTextboxContent) && (
+            {!isTranscriptError &&
+              transcriptText !== "Fetching transcript..." && (
               <>
                 {summaryAlert.message !== "" && (
                   <Alert severity={summaryAlert.level} sx={{ mb: 2 }}>
