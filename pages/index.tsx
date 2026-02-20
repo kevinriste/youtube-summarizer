@@ -63,11 +63,11 @@ const Home = () => {
     setSummaryAlert({ message: "Summary cancelled.", level: "warning" });
   };
 
-  // Shared SSE streaming helper — returns the accumulated text or null on error/abort
+  // Shared SSE streaming helper — returns accumulated text and the response id for chaining
   const streamResponse = async (
     body: Record<string, unknown>,
     onDelta: (accumulated: string) => void,
-  ): Promise<string | null> => {
+  ): Promise<{ text: string; responseId: string | null }> => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -87,6 +87,7 @@ const Home = () => {
     const decoder = new TextDecoder();
     let accumulated = "";
     let lineBuf = "";
+    let responseId: string | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -103,13 +104,16 @@ const Home = () => {
         if (data.type === "delta") {
           accumulated += data.text;
           onDelta(accumulated);
+        } else if (data.type === "complete") {
+          responseId =
+            typeof data.responseId === "string" ? data.responseId : null;
         } else if (data.type === "error") {
           throw new Error(data.message);
         }
       }
     }
 
-    return accumulated;
+    return { text: accumulated, responseId };
   };
 
   const getTranscriptSummary = async (
@@ -122,7 +126,7 @@ const Home = () => {
     setSummaryAlert({ message: "", level: "info" });
     setIsSummaryError(false);
     setIsStreaming(true);
-    setConversationHistory([]);
+    setActiveResponseId(null);
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 50);
 
     const passwordToSubmitToApi = localStorage.getItem("apiPassword");
@@ -135,18 +139,9 @@ const Home = () => {
         (acc) => setSummaryText(acc),
       );
 
-      if (result) {
+      if (result.responseId) setActiveResponseId(result.responseId);
+      if (result.text) {
         setHasSummaryForCurrentTranscript(true);
-        // Only include the transcript as context for follow-ups, not the
-        // summary instruction, so the model doesn't keep producing bullet lists.
-        const context =
-          "### START TRANSCRIPT ### " +
-          transcript +
-          " ### END TRANSCRIPT ###";
-        setConversationHistory([
-          { role: "user", content: context },
-          { role: "assistant", content: result },
-        ]);
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
@@ -181,7 +176,7 @@ const Home = () => {
   };
 
   const sendFollowUp = async () => {
-    if (!followUpText.trim() || conversationHistory.length === 0 || isStreaming) return;
+    if (!followUpText.trim() || !activeResponseId || isStreaming) return;
 
     const question = followUpText.trim();
     setFollowUpText("");
@@ -194,32 +189,28 @@ const Home = () => {
     setFollowUpMessages((prev) => [...prev, { role: "user", content: question }]);
     setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
 
-    const newHistory = [
-      ...conversationHistory,
-      { role: "user", content: question },
-    ];
-
     const passwordToSubmitToApi = localStorage.getItem("apiPassword");
 
     try {
       const result = await streamResponse(
-        { messages: newHistory, passwordToSubmitToApi },
+        {
+          userPrompt: question,
+          previousResponseId: activeResponseId,
+          passwordToSubmitToApi,
+        },
         (acc) => {
           setStreamingText(acc);
           chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
         },
       );
 
-      if (result) {
+      if (result.responseId) setActiveResponseId(result.responseId);
+      if (result.text) {
         setFollowUpMessages((prev) => [
           ...prev,
-          { role: "assistant", content: result },
+          { role: "assistant", content: result.text },
         ]);
         setStreamingText("");
-        setConversationHistory([
-          ...newHistory,
-          { role: "assistant", content: result },
-        ]);
       }
     } catch (err: any) {
       if (err.name !== "AbortError") {
@@ -244,9 +235,9 @@ const Home = () => {
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState("");
   const [isStreaming, setIsStreaming] = React.useState(false);
-  const [conversationHistory, setConversationHistory] = React.useState<
-    Array<{ role: string; content: string }>
-  >([]);
+  const [activeResponseId, setActiveResponseId] = React.useState<string | null>(
+    null,
+  );
   const [followUpMessages, setFollowUpMessages] = React.useState<
     Array<{ role: string; content: string; cancelled?: boolean }>
   >([]);
@@ -568,7 +559,7 @@ const Home = () => {
                   </Alert>
                 )}
                 {!isSummaryError &&
-                  conversationHistory.length > 0 &&
+                  activeResponseId !== null &&
                   (followUpMessages.length > 0 || !isStreaming) && (
                     <Box sx={{ width: "100%", mt: 3 }}>
                       {followUpMessages.length > 0 && (

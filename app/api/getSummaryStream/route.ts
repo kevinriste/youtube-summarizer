@@ -6,26 +6,36 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { transcript, userPrompt, messages, passwordToSubmitToApi } = body;
+    const {
+      transcript,
+      userPrompt,
+      previousResponseId,
+      passwordToSubmitToApi,
+    } = body;
 
     if (passwordToSubmitToApi !== process.env.API_PASSWORD) {
       return new Response("Incorrect API password", { status: 401 });
     }
 
     let input: ResponseInput;
+    const promptText = typeof userPrompt === "string" ? userPrompt : "";
+    const responseId =
+      typeof previousResponseId === "string" ? previousResponseId : "";
 
-    if (messages && Array.isArray(messages)) {
-      // Follow-up conversation with full history
-      input = messages;
+    if (responseId) {
+      if (!promptText.trim()) {
+        return new Response("No prompt provided", { status: 400 });
+      }
+      input = [{ role: "user", content: promptText }];
     } else {
-      if (!transcript) {
+      if (!transcript || typeof transcript !== "string") {
         return new Response("No transcript provided", { status: 400 });
       }
       const prompt =
         "### START TRANSCRIPT ### " +
         transcript +
         " ### END TRANSCRIPT ### " +
-        (userPrompt || "");
+        promptText;
       input = [{ role: "user", content: prompt }];
     }
 
@@ -37,12 +47,13 @@ export async function POST(request: Request) {
     const stream = await openai.responses.create({
       model: process.env.OPENAI_MODEL || "",
       input,
+      previous_response_id: responseId || undefined,
       max_output_tokens: maxOutputTokens,
+      store: true,
       stream: true,
     });
 
     const encoder = new TextEncoder();
-    let buffer = "";
 
     const readable = new ReadableStream({
       cancel() {
@@ -69,7 +80,6 @@ export async function POST(request: Request) {
         try {
           for await (const event of stream) {
             if (event.type === "response.output_text.delta") {
-              buffer += event.delta;
               send({ type: "delta", text: event.delta });
             } else if (event.type === "response.completed") {
               const usage = event.response?.usage;
@@ -78,7 +88,10 @@ export async function POST(request: Request) {
                   `Token usage — input: ${usage.input_tokens}, output: ${usage.output_tokens}, total: ${usage.total_tokens}`,
                 );
               }
-              send({ type: "complete" });
+              send({
+                type: "complete",
+                responseId: event.response?.id || null,
+              });
             } else if (event.type === "error") {
               const message =
                 (event as any).error?.message || "Unknown OpenAI error";
