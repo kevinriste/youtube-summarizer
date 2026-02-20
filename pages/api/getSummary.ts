@@ -42,7 +42,7 @@ const handler = async (req: NextApiRequest, res: NextApiResponse) => {
       const endOfTranscript = " ### END TRANSCRIPT ### " + userPrompt;
       const tokensInEndOfTranscript = encode(endOfTranscript).length;
       const encodedPrompt = encode(prompt);
-      let tokenCount = encodedPrompt.length;
+      const tokenCount = encodedPrompt.length;
       let messageIsBelowTokenLimit = true;
 
       if (
