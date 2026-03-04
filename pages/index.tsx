@@ -67,7 +67,7 @@ const Home = () => {
   const streamResponse = async (
     body: Record<string, unknown>,
     onDelta: (accumulated: string) => void,
-  ): Promise<{ text: string; responseId: string | null }> => {
+  ): Promise<{ text: string; interactionId: string | null }> => {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
@@ -87,7 +87,7 @@ const Home = () => {
     const decoder = new TextDecoder();
     let accumulated = "";
     let lineBuf = "";
-    let responseId: string | null = null;
+    let interactionId: string | null = null;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -105,15 +105,15 @@ const Home = () => {
           accumulated += data.text;
           onDelta(accumulated);
         } else if (data.type === "complete") {
-          responseId =
-            typeof data.responseId === "string" ? data.responseId : null;
+          interactionId =
+            typeof data.interactionId === "string" ? data.interactionId : null;
         } else if (data.type === "error") {
           throw new Error(data.message);
         }
       }
     }
 
-    return { text: accumulated, responseId };
+    return { text: accumulated, interactionId };
   };
 
   const getTranscriptSummary = async (
@@ -126,7 +126,7 @@ const Home = () => {
     setSummaryAlert({ message: "", level: "info" });
     setIsSummaryError(false);
     setIsStreaming(true);
-    setActiveResponseId(null);
+    setActiveInteractionId(null);
     setTimeout(() => window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }), 50);
 
     const passwordToSubmitToApi = localStorage.getItem("apiPassword");
@@ -139,7 +139,7 @@ const Home = () => {
         (acc) => setSummaryText(acc),
       );
 
-      if (result.responseId) setActiveResponseId(result.responseId);
+      if (result.interactionId) setActiveInteractionId(result.interactionId);
       if (result.text) {
         setHasSummaryForCurrentTranscript(true);
       }
@@ -176,7 +176,7 @@ const Home = () => {
   };
 
   const sendFollowUp = async () => {
-    if (!followUpText.trim() || !activeResponseId || isStreaming) return;
+    if (!followUpText.trim() || !activeInteractionId || isStreaming) return;
 
     const question = followUpText.trim();
     setFollowUpText("");
@@ -195,7 +195,7 @@ const Home = () => {
       const result = await streamResponse(
         {
           userPrompt: question,
-          previousResponseId: activeResponseId,
+          previousInteractionId: activeInteractionId,
           passwordToSubmitToApi,
         },
         (acc) => {
@@ -204,7 +204,7 @@ const Home = () => {
         },
       );
 
-      if (result.responseId) setActiveResponseId(result.responseId);
+      if (result.interactionId) setActiveInteractionId(result.interactionId);
       if (result.text) {
         setFollowUpMessages((prev) => [
           ...prev,
@@ -235,7 +235,7 @@ const Home = () => {
   const [isSummaryError, setIsSummaryError] = React.useState(false);
   const [summaryText, setSummaryText] = React.useState("");
   const [isStreaming, setIsStreaming] = React.useState(false);
-  const [activeResponseId, setActiveResponseId] = React.useState<string | null>(
+  const [activeInteractionId, setActiveInteractionId] = React.useState<string | null>(
     null,
   );
   const [followUpMessages, setFollowUpMessages] = React.useState<
@@ -559,7 +559,7 @@ const Home = () => {
                   </Alert>
                 )}
                 {!isSummaryError &&
-                  activeResponseId !== null &&
+                  activeInteractionId !== null &&
                   (followUpMessages.length > 0 || !isStreaming) && (
                     <Box sx={{ width: "100%", mt: 3 }}>
                       {followUpMessages.length > 0 && (

@@ -1,7 +1,12 @@
-import OpenAI from "openai";
-import type { ResponseInput } from "openai/resources/responses/responses";
+import { GoogleGenAI } from "@google/genai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+let client: GoogleGenAI;
+function getClient() {
+  if (!client) {
+    client = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+  }
+  return client;
+}
 
 export async function POST(request: Request) {
   try {
@@ -9,7 +14,7 @@ export async function POST(request: Request) {
     const {
       transcript,
       userPrompt,
-      previousResponseId,
+      previousInteractionId,
       passwordToSubmitToApi,
     } = body;
 
@@ -17,48 +22,44 @@ export async function POST(request: Request) {
       return new Response("Incorrect API password", { status: 401 });
     }
 
-    let input: ResponseInput;
     const promptText = typeof userPrompt === "string" ? userPrompt : "";
-    const responseId =
-      typeof previousResponseId === "string" ? previousResponseId : "";
+    const interactionId =
+      typeof previousInteractionId === "string" ? previousInteractionId : "";
 
-    if (responseId) {
+    let input: string;
+
+    if (interactionId) {
       if (!promptText.trim()) {
         return new Response("No prompt provided", { status: 400 });
       }
-      input = [{ role: "user", content: promptText }];
+      input = promptText;
     } else {
       if (!transcript || typeof transcript !== "string") {
         return new Response("No transcript provided", { status: 400 });
       }
-      const prompt =
+      input =
         "### START TRANSCRIPT ### " +
         transcript +
         " ### END TRANSCRIPT ### " +
         promptText;
-      input = [{ role: "user", content: prompt }];
     }
 
     const maxOutputTokens = parseInt(
-      process.env.OPENAI_MAX_RESPONSE_TOKENS || "4096",
+      process.env.GEMINI_MAX_OUTPUT_TOKENS || "8192",
       10,
     );
 
-    const stream = await openai.responses.create({
-      model: process.env.OPENAI_MODEL || "",
+    const stream = await getClient().interactions.create({
+      model: process.env.GEMINI_MODEL || "gemini-3-flash-preview",
       input,
-      previous_response_id: responseId || undefined,
-      max_output_tokens: maxOutputTokens,
-      store: true,
+      previous_interaction_id: interactionId || undefined,
+      generation_config: { max_output_tokens: maxOutputTokens },
       stream: true,
     });
 
     const encoder = new TextEncoder();
 
     const readable = new ReadableStream({
-      cancel() {
-        stream.controller.abort();
-      },
       async start(controller) {
         let closed = false;
         const send = (data: Record<string, unknown>) => {
@@ -78,24 +79,27 @@ export async function POST(request: Request) {
         };
 
         try {
-          for await (const event of stream) {
-            if (event.type === "response.output_text.delta") {
-              send({ type: "delta", text: event.delta });
-            } else if (event.type === "response.completed") {
-              const usage = event.response?.usage;
+          for await (const chunk of stream) {
+            if (chunk.event_type === "content.delta") {
+              if (chunk.delta.type === "text" && "text" in chunk.delta) {
+                send({ type: "delta", text: chunk.delta.text });
+              }
+              // Filter out thought deltas — don't send them as summary text
+            } else if (chunk.event_type === "interaction.complete") {
+              const usage = chunk.interaction?.usage;
               if (usage) {
                 console.log(
-                  `Token usage — input: ${usage.input_tokens}, output: ${usage.output_tokens}, total: ${usage.total_tokens}`,
+                  `Token usage — input: ${usage.total_input_tokens}, output: ${usage.total_output_tokens}, total: ${usage.total_tokens}`,
                 );
               }
               send({
                 type: "complete",
-                responseId: event.response?.id || null,
+                interactionId: chunk.interaction?.id || null,
               });
-            } else if (event.type === "error") {
+            } else if (chunk.event_type === "error") {
               const message =
-                (event as any).error?.message || "Unknown OpenAI error";
-              console.error("OpenAI stream error:", message);
+                (chunk as any).error?.message || "Unknown Gemini error";
+              console.error("Gemini stream error:", message);
               send({ type: "error", message });
             }
           }

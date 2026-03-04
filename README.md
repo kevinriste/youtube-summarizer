@@ -1,35 +1,32 @@
 # AI Summarizer (YouTube)
 
-This project provides a simple web interface for turning long YouTube videos into concise, structured summaries.  
-It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Docker support for deployment.
+This project provides a simple web interface for turning long YouTube videos into concise, structured summaries.
+It's built with **Next.js**, **Material UI**, and the **Gemini API**, with Docker support for deployment.
 
 ---
 
 ## Features
 
-- **YouTube transcript extraction**  
+- **YouTube transcript extraction**
   Paste a YouTube URL (or video ID) and the app fetches and cleans the transcript automatically using `youtube-transcript-plus`.
 
-- **Customizable summary prompts**  
+- **Customizable summary prompts**
   Adjust the instructions sent to the model (e.g., bullet points, key themes, narrative summary).
 
-- **Token-aware fallback**  
-  If a transcript is too long to fit in a single model request, the app automatically uploads the transcript as a file and continues the conversation with an Assistant run. This ensures long inputs don’t fail silently and summaries are still generated.
+- **Streaming summaries with follow-up conversation**
+  Summaries stream in real-time via SSE. After a summary completes, ask follow-up questions that maintain full conversation context via the Gemini Interactions API.
 
-- **Password-protected API**  
+- **Password-protected API**
   A configurable API password (stored locally in the browser) ensures only authorized users can generate summaries.
 
-- **Polling for long jobs**  
-  If the Assistant workflow is triggered, the UI polls for completion and updates with progress information.
-
-- **Clipboard integration**  
+- **Clipboard integration**
   Copy transcript or summary text directly to the clipboard (summary text attempts to copy rich text version, falls back to plain text if necessary).
 
-- **Responsive design**  
-  Works well on both desktop and mobile layouts, using Material UI’s responsive grid system.
+- **Responsive design**
+  Works well on both desktop and mobile layouts, using Material UI's responsive grid system.
 
-- **Language fallback for transcripts**  
-  If the requested language isn’t available, the app retries using the first available caption language, and falls back to a no-language request if parsing fails.
+- **Language fallback for transcripts**
+  If the requested language isn't available, the app retries using the first available caption language, and falls back to a no-language request if parsing fails.
 
 ---
 
@@ -38,7 +35,7 @@ It’s built with **Next.js**, **Material UI**, and the **OpenAI API**, with Doc
 ### Prerequisites
 
 - Node.js 18+ or Docker
-- An [OpenAI API key](https://platform.openai.com/)
+- A [Gemini API key](https://aistudio.google.com/)
 
 ### Local Development
 
@@ -84,7 +81,7 @@ Make sure to configure `.env.local` before building.
 ## Project Structure
 
 - `pages/api/getTranscript.ts` – API route for fetching YouTube transcripts
-- `pages/api/getSummary.ts` – API route for generating summaries
+- `app/api/getSummaryStream/route.ts` – API route for streaming summaries (Gemini Interactions API)
 - `pages/index.tsx` – Main UI
 - `util/theme.ts` – Material UI theme configuration
 - `util/createEmotionCache.ts` – SSR style caching for Emotion/Material UI
