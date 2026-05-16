@@ -80,12 +80,11 @@ export async function POST(request: Request) {
 
         try {
           for await (const chunk of stream) {
-            if (chunk.event_type === "content.delta") {
+            if (chunk.event_type === "step.delta") {
               if (chunk.delta.type === "text" && "text" in chunk.delta) {
                 send({ type: "delta", text: chunk.delta.text });
               }
-              // Filter out thought deltas — don't send them as summary text
-            } else if (chunk.event_type === "interaction.complete") {
+            } else if (chunk.event_type === "interaction.completed") {
               const usage = chunk.interaction?.usage;
               if (usage) {
                 console.log(
