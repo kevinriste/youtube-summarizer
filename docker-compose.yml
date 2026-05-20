@@ -10,9 +10,11 @@ services:
       - .env.local
     build: .
     networks:
+      - default
       - nginx-proxy
 
 networks:
+  default:
   nginx-proxy:
     name: nginx-proxy-certbot-docker_default
     external: true
